@@ -4000,9 +4000,11 @@ int XREMain::XRE_mainInit(bool* aExitFlag) {
     gKioskMonitor = atoi(kioskMonitorNumber);
   }
 
-  gAllowContentAnalysisArgPresent =
-      CheckArg("allow-content-analysis", nullptr, CheckArgFlag::RemoveArg) ==
-      ARG_FOUND;
+  if (XRE_IsParentProcess()) {
+    gAllowContentAnalysisArgPresent =
+        CheckArg("allow-content-analysis", nullptr, CheckArgFlag::None) ==
+        ARG_FOUND;
+  }
 
   nsresult rv;
   ArgResult ar;
