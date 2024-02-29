@@ -1140,20 +1140,26 @@ nsresult EventStateManager::PreHandleEvent(nsPresContext* aPresContext,
     case eDragOver: {
       WidgetDragEvent* dragEvent = aEvent->AsDragEvent();
       MOZ_ASSERT(dragEvent);
-      if (dragEvent->mFlags.mIsSynthesizedForTests) {
+      nsCOMPtr<nsIDragService> dragService =
+          do_GetService("@mozilla.org/widget/dragservice;1");
+      if (dragEvent->mFlags.mIsSynthesizedForTests && dragService &&
+          !dragService->NeverAllowSessionIsSynthesizedForTests()) {
         dragEvent->InitDropEffectForTests();
       }
       // Send the enter/exit events before eDrop.
       GenerateDragDropEnterExit(aPresContext, dragEvent);
       break;
     }
-    case eDrop:
-      if (aEvent->mFlags.mIsSynthesizedForTests) {
+    case eDrop: {
+      nsCOMPtr<nsIDragService> dragService =
+          do_GetService("@mozilla.org/widget/dragservice;1");
+      if (aEvent->mFlags.mIsSynthesizedForTests && dragService &&
+          !dragService->NeverAllowSessionIsSynthesizedForTests()) {
         MOZ_ASSERT(aEvent->AsDragEvent());
         aEvent->AsDragEvent()->InitDropEffectForTests();
       }
       break;
-
+    }
     case eKeyPress: {
       WidgetKeyboardEvent* keyEvent = aEvent->AsKeyboardEvent();
       if (keyEvent->ModifiersMatchWithAccessKey(AccessKeyType::eChrome) ||
@@ -4317,8 +4323,11 @@ nsresult EventStateManager::PostHandleEvent(nsPresContext* aPresContext,
 
     case eDrop: {
       if (aEvent->mFlags.mIsSynthesizedForTests) {
-        if (nsCOMPtr<nsIDragSession> dragSession =
-                nsContentUtils::GetDragSession()) {
+        nsCOMPtr<nsIDragService> dragService =
+            do_GetService("@mozilla.org/widget/dragservice;1");
+        nsCOMPtr<nsIDragSession> dragSession = nsContentUtils::GetDragSession();
+        if (dragSession && dragService &&
+            !dragService->NeverAllowSessionIsSynthesizedForTests()) {
           MOZ_ASSERT(dragSession->IsSynthesizedForTests());
           RefPtr<WindowContext> sourceWC;
           DebugOnly<nsresult> rvIgnored =
