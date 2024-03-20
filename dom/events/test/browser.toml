@@ -11,6 +11,13 @@ support-files = [
 
 ["browser_bug1539497.js"]
 
+["browser_dragdrop.js"]
+support-files = [
+  "browser_dragdrop_inner.html",
+  "browser_dragdrop_outer.html",
+]
+https_first_disabled = true
+
 ["browser_dragimage.js"]
 support-files = [
   "dragimage.html",
