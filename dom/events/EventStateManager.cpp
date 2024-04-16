@@ -2399,13 +2399,13 @@ void EventStateManager::StopTrackingDragGesture(bool aClearInChildProcesses) {
   if (aClearInChildProcesses) {
     nsCOMPtr<nsIDragService> dragService =
         do_GetService("@mozilla.org/widget/dragservice;1");
-    if (dragService) {
-      nsCOMPtr<nsIDragSession> dragSession;
-      dragService->GetCurrentSession(getter_AddRefs(dragSession));
-      if (!dragSession) {
-        // Only notify if there isn't a drag session active.
-        dragService->RemoveAllChildProcesses();
-      }
+    RefPtr<nsIDragSession> session;
+    if (mPresContext->GetRootWidget()) {
+      session = mPresContext->GetRootWidget()->GetDragSession();
+    }
+    if (dragService && !session) {
+      // Only notify if there isn't a drag session active.
+      dragService->RemoveAllChildProcesses();
     }
   }
 }
@@ -2790,8 +2790,12 @@ bool EventStateManager::DoDefaultDragStart(
   // began.  However, if we're handling drag session for synthesized events,
   // we need to initialize some information of the session.  Therefore, we
   // need to keep going for synthesized case.
-  nsCOMPtr<nsIDragSession> dragSession;
-  dragService->GetCurrentSession(getter_AddRefs(dragSession));
+  if (MOZ_UNLIKELY(!mPresContext || !mPresContext->GetRootWidget())) {
+    return true;
+  }
+
+  nsCOMPtr<nsIDragSession> dragSession =
+      mPresContext->GetRootWidget()->GetDragSession();
   if (dragSession && !dragSession->IsSynthesizedForTests()) {
     return true;
   }

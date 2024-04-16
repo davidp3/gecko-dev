@@ -166,8 +166,7 @@ void nsNativeDragTarget::ProcessDrag(EventMessage aEventMessage,
   GetGeckoDragAction(grfKeyState, pdwEffect, &geckoAction);
 
   // Set the current action into the Gecko specific type
-  nsCOMPtr<nsIDragSession> currSession;
-  mDragService->GetCurrentSession(getter_AddRefs(currSession));
+  nsCOMPtr<nsIDragSession> currSession = mWidget->GetDragSession();
   if (!currSession) {
     return;
   }
@@ -298,8 +297,7 @@ nsNativeDragTarget::DragOver(DWORD grfKeyState, POINTL ptl, LPDWORD pdwEffect) {
   // then we should include it as an allowed effect.
   mEffectsAllowed = (*pdwEffect) | (mEffectsAllowed & DROPEFFECT_LINK);
 
-  nsCOMPtr<nsIDragSession> currentDragSession;
-  mDragService->GetCurrentSession(getter_AddRefs(currentDragSession));
+  nsCOMPtr<nsIDragSession> currentDragSession = mWidget->GetDragSession();
   if (!currentDragSession) {
     return S_OK;  // Drag was canceled.
   }
@@ -349,9 +347,7 @@ nsNativeDragTarget::DragLeave() {
   // dispatch the event into Gecko
   DispatchDragDropEvent(eDragExit, gDragLastPoint);
 
-  nsCOMPtr<nsIDragSession> currentDragSession;
-  mDragService->GetCurrentSession(getter_AddRefs(currentDragSession));
-
+  nsCOMPtr<nsIDragSession> currentDragSession = mWidget->GetDragSession();
   if (currentDragSession) {
     nsCOMPtr<nsINode> sourceNode;
     currentDragSession->GetSourceNode(getter_AddRefs(sourceNode));
@@ -426,8 +422,7 @@ nsNativeDragTarget::Drop(LPDATAOBJECT pData, DWORD grfKeyState, POINTL aPT,
   // Now process the native drag state and then dispatch the event
   ProcessDrag(eDrop, grfKeyState, aPT, pdwEffect);
 
-  nsCOMPtr<nsIDragSession> currentDragSession;
-  serv->GetCurrentSession(getter_AddRefs(currentDragSession));
+  nsCOMPtr<nsIDragSession> currentDragSession = mWidget->GetDragSession();
   if (!currentDragSession) {
     return S_OK;  // DragCancel() was called.
   }

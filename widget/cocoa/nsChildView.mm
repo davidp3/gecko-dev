@@ -3973,11 +3973,11 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
 }
 
 - (BOOL)isDragInProgress {
-  if (!mDragService) return NO;
-
-  nsCOMPtr<nsIDragSession> dragSession;
-  mDragService->GetCurrentSession(getter_AddRefs(dragSession));
-  return dragSession != nullptr;
+  if (!mGeckoChild) {
+    return NO;
+  }
+  RefPtr<nsIDragSession> session = mGeckoChild->GetDragSession();
+  return !!session;
 }
 
 - (BOOL)inactiveWindowAcceptsMouseEvent:(NSEvent*)aEvent {
@@ -4112,8 +4112,7 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
     mDragService->StartDragSession();
   }
 
-  nsCOMPtr<nsIDragSession> dragSession;
-  mDragService->GetCurrentSession(getter_AddRefs(dragSession));
+  nsCOMPtr<nsIDragSession> dragSession = mGeckoChild->GetDragSession();
   if (dragSession) {
     if (aMessage == eDragOver) {
       // fire the drag event at the source. Just ignore whether it was

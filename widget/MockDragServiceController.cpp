@@ -141,9 +141,7 @@ MockDragServiceController::SendEvent(
     ds->StartDragSession();
   }
 
-  nsCOMPtr<nsIDragSession> currentDragSession;
-  nsresult rv = ds->GetCurrentSession(getter_AddRefs(currentDragSession));
-  NS_ENSURE_SUCCESS(rv, rv);
+  nsCOMPtr<nsIDragSession> currentDragSession = widget->GetDragSession();
 
   switch (aEventType) {
     case EventType::eMouseDown:
@@ -152,8 +150,6 @@ MockDragServiceController::SendEvent(
       widget->DispatchInputEvent(widgetEvent.get());
       break;
     case EventType::eDragEnter:
-      rv = ds->GetCurrentSession(getter_AddRefs(currentDragSession));
-      NS_ENSURE_SUCCESS(rv, rv);
       NS_ENSURE_TRUE(currentDragSession, NS_ERROR_UNEXPECTED);
       currentDragSession->SetDragAction(nsIDragService::DRAGDROP_ACTION_MOVE);
       widget->DispatchInputEvent(widgetEvent.get());
@@ -166,7 +162,8 @@ MockDragServiceController::SendEvent(
                                      LayoutDeviceIntPoint(aScreenX, aScreenY));
       if (currentDragSession) {
         nsCOMPtr<nsINode> sourceNode;
-        rv = currentDragSession->GetSourceNode(getter_AddRefs(sourceNode));
+        nsresult rv =
+            currentDragSession->GetSourceNode(getter_AddRefs(sourceNode));
         NS_ENSURE_SUCCESS(rv, rv);
         if (!sourceNode) {
           rv = ds->EndDragSession(false /* doneDrag */, aKeyModifiers);
@@ -174,20 +171,22 @@ MockDragServiceController::SendEvent(
         }
       }
     } break;
-    case EventType::eDragOver:
+    case EventType::eDragOver: {
       NS_ENSURE_TRUE(currentDragSession, NS_ERROR_UNEXPECTED);
-      rv = ds->FireDragEventAtSource(EventMessage::eDrag, aKeyModifiers);
+      nsresult rv =
+          ds->FireDragEventAtSource(EventMessage::eDrag, aKeyModifiers);
       currentDragSession->SetDragAction(nsIDragService::DRAGDROP_ACTION_MOVE);
       NS_ENSURE_SUCCESS(rv, rv);
       widget->DispatchInputEvent(widgetEvent.get());
       break;
+    }
     case EventType::eDrop: {
       NS_ENSURE_TRUE(currentDragSession, NS_ERROR_UNEXPECTED);
       currentDragSession->SetDragAction(nsIDragService::DRAGDROP_ACTION_MOVE);
       widget->DispatchInputEvent(widgetEvent.get());
       SetDragEndPointFromScreenPoint(ds, presCxt,
                                      LayoutDeviceIntPoint(aScreenX, aScreenY));
-      rv = ds->EndDragSession(true /* doneDrag */, aKeyModifiers);
+      nsresult rv = ds->EndDragSession(true /* doneDrag */, aKeyModifiers);
       NS_ENSURE_SUCCESS(rv, rv);
     } break;
     default:

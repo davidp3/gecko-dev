@@ -4928,8 +4928,7 @@ void nsWindow::OnContainerFocusOutEvent(GdkEventFocus* aEvent) {
     const bool shouldRollupMenus = [&] {
       nsCOMPtr<nsIDragService> dragService =
           do_GetService("@mozilla.org/widget/dragservice;1");
-      nsCOMPtr<nsIDragSession> dragSession;
-      dragService->GetCurrentSession(getter_AddRefs(dragSession));
+      nsCOMPtr<nsIDragSession> dragSession = GetDragSession();
       if (!dragSession) {
         return true;
       }
@@ -7656,16 +7655,8 @@ bool nsWindow::CheckForRollup(gdouble aMouseX, gdouble aMouseY, bool aIsWheel,
   return retVal;
 }
 
-/* static */
 bool nsWindow::DragInProgress() {
-  nsCOMPtr<nsIDragService> dragService =
-      do_GetService("@mozilla.org/widget/dragservice;1");
-  if (!dragService) {
-    return false;
-  }
-
-  nsCOMPtr<nsIDragSession> currentDragSession;
-  dragService->GetCurrentSession(getter_AddRefs(currentDragSession));
+  nsCOMPtr<nsIDragSession> currentDragSession = GetDragSession();
   return !!currentDragSession;
 }
 
@@ -7673,7 +7664,8 @@ bool nsWindow::DragInProgress() {
 // https://bugzilla.mozilla.org/show_bug.cgi?id=1622107
 // We try to detect when Wayland compositor / gtk fails to deliver
 // info about finished D&D operations and cancel it on our own.
-MOZ_CAN_RUN_SCRIPT static void WaylandDragWorkaround(GdkEventButton* aEvent) {
+MOZ_CAN_RUN_SCRIPT static void WaylandDragWorkaround(nsWindow* aWindow,
+                                                     GdkEventButton* aEvent) {
   static int buttonPressCountWithDrag = 0;
 
   // We track only left button state as Firefox performs D&D on left
@@ -7687,8 +7679,7 @@ MOZ_CAN_RUN_SCRIPT static void WaylandDragWorkaround(GdkEventButton* aEvent) {
   if (!dragService) {
     return;
   }
-  nsCOMPtr<nsIDragSession> currentDragSession;
-  dragService->GetCurrentSession(getter_AddRefs(currentDragSession));
+  nsCOMPtr<nsIDragSession> currentDragSession = aWindow->GetDragSession();
 
   if (!currentDragSession) {
     buttonPressCountWithDrag = 0;
@@ -8348,7 +8339,7 @@ static gboolean button_press_event_cb(GtkWidget* widget,
   window->OnButtonPressEvent(event);
 
   if (GdkIsWaylandDisplay()) {
-    WaylandDragWorkaround(event);
+    WaylandDragWorkaround(window, event);
   }
 
   return TRUE;

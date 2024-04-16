@@ -1894,10 +1894,12 @@ void GeckoViewSupport::AttachAccessibility(
           sessionAccessibility);
 }
 
-auto GeckoViewSupport::OnLoadRequest(
-    mozilla::jni::String::Param aUri, int32_t aWindowType, int32_t aFlags,
-    mozilla::jni::String::Param aTriggeringUri, bool aHasUserGesture,
-    bool aIsTopLevel) const -> java::GeckoResult::LocalRef {
+auto GeckoViewSupport::OnLoadRequest(mozilla::jni::String::Param aUri,
+                                     int32_t aWindowType, int32_t aFlags,
+                                     mozilla::jni::String::Param aTriggeringUri,
+                                     bool aHasUserGesture,
+                                     bool aIsTopLevel) const
+    -> java::GeckoResult::LocalRef {
   GeckoSession::Window::LocalRef window(mGeckoViewWindow);
   if (!window) {
     return nullptr;
@@ -2692,8 +2694,7 @@ void nsWindow::OnDragEvent(int32_t aAction, int64_t aTime, float aX, float aY,
     nsDragService::SetDropData(dropData);
   }
 
-  nsCOMPtr<nsIDragSession> dragSession;
-  dragService->GetCurrentSession(getter_AddRefs(dragSession));
+  nsCOMPtr<nsIDragSession> dragSession = GetDragSession();
   if (dragSession) {
     switch (message) {
       case eDragOver:

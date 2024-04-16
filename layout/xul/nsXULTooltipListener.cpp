@@ -28,6 +28,7 @@
 #include "mozilla/PresShell.h"
 #include "mozilla/ScopeExit.h"
 #include "mozilla/StaticPrefs_browser.h"
+#include "mozilla/dom/DocumentInlines.h"
 #include "mozilla/dom/Element.h"
 #include "mozilla/dom/Event.h"  // for Event
 #include "mozilla/dom/MouseEvent.h"
@@ -249,11 +250,11 @@ nsXULTooltipListener::HandleEvent(Event* aEvent) {
 
   // Note that mousemove, mouseover and mouseout might be
   // fired even during dragging due to widget's bug.
-  nsCOMPtr<nsIDragService> dragService =
-      do_GetService("@mozilla.org/widget/dragservice;1");
-  NS_ENSURE_TRUE(dragService, NS_OK);
-  nsCOMPtr<nsIDragSession> dragSession;
-  dragService->GetCurrentSession(getter_AddRefs(dragSession));
+  auto* widgetGuiEvent = aEvent->WidgetEventPtr()->AsGUIEvent();
+  nsCOMPtr<nsIWidget> widget =
+      widgetGuiEvent ? widgetGuiEvent->mWidget : nullptr;
+  nsCOMPtr<nsIDragSession> dragSession =
+      widget ? widget->GetDragSession() : nullptr;
   if (dragSession) {
     return NS_OK;
   }
