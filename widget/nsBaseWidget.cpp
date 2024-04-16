@@ -68,6 +68,8 @@
 #include "nsIAppWindow.h"
 #include "nsIBaseWindow.h"
 #include "nsIContent.h"
+#include "nsIDragService.h"
+#include "nsIDragSession.h"
 #include "nsIScreenManager.h"
 #include "nsISimpleEnumerator.h"
 #include "nsIWidgetListener.h"
@@ -2484,6 +2486,18 @@ already_AddRefed<nsIBidiKeyboard> nsIWidget::CreateBidiKeyboardInner() {
   return nullptr;
 }
 #endif
+
+nsIDragSession* nsIWidget::GetDragSession() {
+  // Temporary implementation that delegates to the singleton.  This
+  // will be replaced by the end of the patch series.
+  nsCOMPtr<nsIDragSession> dragSession;
+  nsCOMPtr<nsIDragService> dragService =
+      do_GetService("@mozilla.org/widget/dragservice;1");
+  if (dragService) {
+    dragService->GetCurrentSession(getter_AddRefs(dragSession));
+  }
+  return dragSession;
+}
 
 namespace mozilla::widget {
 

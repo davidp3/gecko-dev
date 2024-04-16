@@ -48,6 +48,7 @@
 class nsIBidiKeyboard;
 class nsIRollupListener;
 class nsIContent;
+class nsIDragSession;
 class ViewWrapper;
 class nsIRunnable;
 
@@ -2113,6 +2114,11 @@ class nsIWidget : public nsISupports {
   }
   virtual nsresult RestoreHiDPIMode() { return NS_ERROR_NOT_IMPLEMENTED; }
 #endif
+
+  /**
+   * Current drag session happening on this widget, if any.
+   */
+  nsIDragSession* GetDragSession();
 
  protected:
   // keep the list of children.  We also keep track of our siblings.
