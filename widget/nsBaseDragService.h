@@ -80,6 +80,10 @@ class nsBaseDragService : public nsIDragService, public nsIDragSession {
 
   int32_t TakeChildProcessDragAction();
 
+  // TODO: This is part of a hack used by nsIWidget to get the singleton
+  // session.  It will be removed at the end of the patch series.
+  bool IsDragging() { return mDoingDrag && mSuppressLevel == 0; }
+
  protected:
   virtual ~nsBaseDragService();
 

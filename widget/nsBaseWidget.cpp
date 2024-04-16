@@ -96,6 +96,8 @@ static mozilla::LazyLogModule sBaseWidgetLog("BaseWidget");
 #ifdef DEBUG
 #  include "nsIObserver.h"
 
+#  include "nsBaseDragService.h"
+
 static void debug_RegisterPrefCallbacks();
 
 #endif
@@ -2491,11 +2493,13 @@ already_AddRefed<nsIBidiKeyboard> nsIWidget::CreateBidiKeyboardInner() {
 nsIDragSession* nsIWidget::GetDragSession() {
   // Temporary implementation that delegates to the singleton.  This
   // will be replaced by the end of the patch series.
-  nsCOMPtr<nsIDragSession> dragSession;
   nsCOMPtr<nsIDragService> dragService =
       do_GetService("@mozilla.org/widget/dragservice;1");
-  if (dragService) {
-    dragService->GetCurrentSession(getter_AddRefs(dragSession));
+  // TODO: This is still a hack to get at the singleton when there is an
+  // active session.  This will be changed in a later patch.
+  nsCOMPtr<nsIDragSession> dragSession;
+  if (static_cast<nsBaseDragService*>(dragService.get())->IsDragging()) {
+    dragSession = do_QueryInterface(dragService);
   }
   return dragSession;
 }

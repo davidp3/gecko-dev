@@ -525,17 +525,25 @@ nsBaseDragService::InvokeDragSessionWithSelection(
 
 //-------------------------------------------------------------------------
 NS_IMETHODIMP
-nsBaseDragService::GetCurrentSession(nsIDragSession** aSession) {
-  if (!aSession) return NS_ERROR_INVALID_ARG;
+nsBaseDragService::GetCurrentSession(mozIDOMWindowProxy* aWindowProxy,
+                                     nsIDragSession** aSession) {
+  NS_ENSURE_TRUE(aSession, NS_ERROR_INVALID_ARG);
 
-  // "this" also implements a drag session, so say we are one but only
-  // if there is currently a drag going on.
-  if (!mSuppressLevel && mDoingDrag) {
-    *aSession = this;
-    NS_ADDREF(*aSession);  // addRef because we're a "getter"
-  } else
-    *aSession = nullptr;
-
+  nsCOMPtr<nsPIDOMWindowInner> winInner;
+  if (aWindowProxy) {
+    auto* window = nsPIDOMWindowOuter::From(aWindowProxy);
+    MOZ_ASSERT(window);
+    winInner = window->GetCurrentInnerWindow();
+  } else {
+    winInner = do_QueryInterface(GetEntryGlobal());
+  }
+  NS_ENSURE_TRUE(winInner, NS_ERROR_FAILURE);
+  nsGlobalWindowInner* globalWinInner = nsGlobalWindowInner::Cast(winInner);
+  NS_ENSURE_TRUE(globalWinInner, NS_ERROR_FAILURE);
+  nsIWidget* widget = globalWinInner->GetNearestWidget();
+  NS_ENSURE_TRUE(widget, NS_ERROR_FAILURE);
+  RefPtr<nsIDragSession> session = widget->GetDragSession();
+  session.forget(aSession);
   return NS_OK;
 }
 

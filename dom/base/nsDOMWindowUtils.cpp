@@ -4890,3 +4890,15 @@ nsDOMWindowUtils::RestoreHiDPIMode() {
   return NS_ERROR_NOT_AVAILABLE;
 #endif
 }
+
+NS_IMETHODIMP
+nsDOMWindowUtils::GetDragSession(nsIDragSession** aSession) {
+  nsCOMPtr<nsIWidget> widget = GetWidget();
+  if (!widget) {
+    return NS_ERROR_FAILURE;
+  }
+
+  RefPtr<nsIDragSession> session = widget->GetDragSession();
+  session.forget(aSession);
+  return NS_OK;
+}

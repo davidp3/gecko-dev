@@ -15,6 +15,7 @@ webidl Node;
 webidl Selection;
 
 interface nsICookieJarSettings;
+interface mozIDOMWindowProxy;
 interface nsIMockDragServiceController;
 
 %{C++
@@ -138,9 +139,10 @@ interface nsIDragService : nsISupports
                                       in DataTransferPtr aDataTransfer);
 
   /**
-    * Returns the current Drag Session
+    * Returns the current Drag Session for the widget containing the given
+    * window, or the current JS context if aWindow is not specified.
     */
-  nsIDragSession getCurrentSession();
+  nsIDragSession getCurrentSession([optional] in mozIDOMWindowProxy aWindow);
 
   /**
     * Tells the Drag Service to start a drag session. This is called when
