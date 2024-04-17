@@ -78,10 +78,13 @@ using namespace mozilla::gfx;
 
 #ifdef MOZ_LOGGING
 extern mozilla::LazyLogModule gWidgetDragLog;
-#  define LOGDRAGSERVICE(str, ...)                    \
-    MOZ_LOG(gWidgetDragLog, mozilla::LogLevel::Debug, \
-            ("[D %d] %*s" str, GetLoopDepth(),        \
-             GetLoopDepth() > 1 ? GetLoopDepth() * 2 : 0, "", ##__VA_ARGS__))
+#  define LOGDRAGSERVICE(str, ...)                                             \
+    MOZ_LOG(                                                                   \
+        gWidgetDragLog, mozilla::LogLevel::Debug,                              \
+        ("[D %d] %*s" str, nsDragSession::GetLoopDepth(),                      \
+         nsDragSession::GetLoopDepth() > 1 ? nsDragSession::GetLoopDepth() * 2 \
+                                           : 0,                                \
+         "", ##__VA_ARGS__))
 #  define LOGDRAGSERVICESTATIC(str, ...) \
     MOZ_LOG(gWidgetDragLog, mozilla::LogLevel::Debug, (str, ##__VA_ARGS__))
 #else
@@ -514,11 +517,12 @@ void DragData::Print() const {
 }
 #endif
 
+/* static */ int nsDragSession::sEventLoopDepth = 0;
+
 nsDragService::nsDragService()
     : mScheduledTask(eDragTaskNone),
       mTaskSource(0),
-      mScheduledTaskIsRunning(false),
-      mCachedDragContext() {
+      mScheduledTaskIsRunning(false) {
   // We have to destroy the hidden widget before the event loop stops
   // running.
   nsCOMPtr<nsIObserverService> obsServ =
@@ -550,9 +554,7 @@ nsDragService::nsDragService()
   }
 
   // set up our logging module
-  mCanDrop = false;
   mTempFileTimerID = 0;
-  mEventLoopDepth = 0;
 
   static std::once_flag onceFlag;
   std::call_once(onceFlag, [] {
@@ -987,15 +989,15 @@ nsDragService::EndDragSession(bool aDoneDrag, uint32_t aKeyModifiers) {
 
 // nsIDragSession
 NS_IMETHODIMP
-nsDragService::SetCanDrop(bool aCanDrop) {
-  LOGDRAGSERVICE("nsDragService::SetCanDrop %d", aCanDrop);
+nsDragSession::SetCanDrop(bool aCanDrop) {
+  LOGDRAGSERVICE("nsDragSession::SetCanDrop %d", aCanDrop);
   mCanDrop = aCanDrop;
   return NS_OK;
 }
 
 NS_IMETHODIMP
-nsDragService::GetCanDrop(bool* aCanDrop) {
-  LOGDRAGSERVICE("nsDragService::GetCanDrop");
+nsDragSession::GetCanDrop(bool* aCanDrop) {
+  LOGDRAGSERVICE("nsDragSession::GetCanDrop");
   *aCanDrop = mCanDrop;
   return NS_OK;
 }
@@ -1003,8 +1005,8 @@ nsDragService::GetCanDrop(bool* aCanDrop) {
 // Spins event loop, called from JS.
 // Can lead to another round of drag_motion events.
 NS_IMETHODIMP
-nsDragService::GetNumDropItems(uint32_t* aNumItems) {
-  LOGDRAGSERVICE("nsDragService::GetNumDropItems");
+nsDragSession::GetNumDropItems(uint32_t* aNumItems) {
+  LOGDRAGSERVICE("nsDragSession::GetNumDropItems");
 
   if (!mTargetWidget) {
     LOGDRAGSERVICE(
@@ -1047,8 +1049,8 @@ nsDragService::GetNumDropItems(uint32_t* aNumItems) {
 // Spins event loop, called from JS.
 // Can lead to another round of drag_motion events.
 NS_IMETHODIMP
-nsDragService::GetData(nsITransferable* aTransferable, uint32_t aItemIndex) {
-  LOGDRAGSERVICE("nsDragService::GetData(), index %d", aItemIndex);
+nsDragSession::GetData(nsITransferable* aTransferable, uint32_t aItemIndex) {
+  LOGDRAGSERVICE("nsDragSession::GetData(), index %d", aItemIndex);
 
   // make sure that we have a transferable
   if (!aTransferable) {
@@ -1186,8 +1188,8 @@ nsDragService::GetData(nsITransferable* aTransferable, uint32_t aItemIndex) {
 }
 
 NS_IMETHODIMP
-nsDragService::IsDataFlavorSupported(const char* aDataFlavor, bool* _retval) {
-  LOGDRAGSERVICE("nsDragService::IsDataFlavorSupported(%p) %s",
+nsDragSession::IsDataFlavorSupported(const char* aDataFlavor, bool* _retval) {
+  LOGDRAGSERVICE("nsDragSession::IsDataFlavorSupported(%p) %s",
                  mTargetDragContext.get(), aDataFlavor);
   if (!_retval) {
     return NS_ERROR_INVALID_ARG;
@@ -1277,9 +1279,9 @@ nsDragService::IsDataFlavorSupported(const char* aDataFlavor, bool* _retval) {
   return NS_OK;
 }
 
-void nsDragService::ReplyToDragMotion(GdkDragContext* aDragContext,
+void nsDragSession::ReplyToDragMotion(GdkDragContext* aDragContext,
                                       guint aTime) {
-  LOGDRAGSERVICE("nsDragService::ReplyToDragMotion(%p) can drop %d",
+  LOGDRAGSERVICE("nsDragSession::ReplyToDragMotion(%p) can drop %d",
                  aDragContext, mCanDrop);
 
   GdkDragAction action = (GdkDragAction)0;
@@ -2847,8 +2849,8 @@ void nsDragService::UpdateDragAction(GdkDragContext* aDragContext) {
 void nsDragService::UpdateDragAction() { UpdateDragAction(mTargetDragContext); }
 
 NS_IMETHODIMP
-nsDragService::UpdateDragEffect() {
-  LOGDRAGSERVICE("nsDragService::UpdateDragEffect() from e10s child process");
+nsDragSession::UpdateDragEffect() {
+  LOGDRAGSERVICE("nsDragSession::UpdateDragEffect() from e10s child process");
   if (mTargetDragContextForRemote) {
     ReplyToDragMotion(mTargetDragContextForRemote, mTargetTime);
     mTargetDragContextForRemote = nullptr;
@@ -2856,7 +2858,7 @@ nsDragService::UpdateDragEffect() {
   return NS_OK;
 }
 
-void nsDragService::ReplyToDragMotion() {
+void nsDragSession::ReplyToDragMotion() {
   if (mTargetDragContext) {
     ReplyToDragMotion(mTargetDragContext, mTargetTime);
   }

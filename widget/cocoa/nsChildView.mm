@@ -4309,7 +4309,10 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
     // value for NSDragOperationGeneric that is passed by other applications.
     // All that said, NSDragOperationNone is still reliable.
     if (aOperation == NSDragOperationNone) {
-      RefPtr<dom::DataTransfer> dataTransfer = dragService->GetDataTransfer();
+      RefPtr<nsIDragSession> session =
+          mGeckoChild ? mGeckoChild->GetDragSession() : nullptr;
+      RefPtr<dom::DataTransfer> dataTransfer =
+          session ? session->GetDataTransfer() : nullptr;
       if (dataTransfer) {
         dataTransfer->SetDropEffectInt(nsIDragService::DRAGDROP_ACTION_NONE);
       }
