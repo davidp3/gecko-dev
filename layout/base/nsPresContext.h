@@ -1128,6 +1128,10 @@ class nsPresContext : public nsISupports, public mozilla::SupportsWeakPtr {
     return mMarkPaintTimingStart;
   }
 
+  // Get the drag session that is currently happening from or to the
+  // root widget.
+  nsIDragSession* GetDragSession();
+
  protected:
   // May be called multiple times (unlink, destructor)
   void Destroy();

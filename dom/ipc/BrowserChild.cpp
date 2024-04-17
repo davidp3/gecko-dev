@@ -1871,7 +1871,7 @@ mozilla::ipc::IPCResult BrowserChild::RecvRealDragEvent(
   WidgetDragEvent localEvent(aEvent);
   localEvent.mWidget = mPuppetWidget;
 
-  nsCOMPtr<nsIDragSession> dragSession = nsContentUtils::GetDragSession();
+  nsIDragSession* dragSession = mPuppetWidget->GetDragSession();
   if (dragSession) {
     dragSession->SetDragAction(aDragAction);
     dragSession->SetTriggeringPrincipal(aPrincipal);

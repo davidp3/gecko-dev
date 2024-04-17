@@ -2024,12 +2024,13 @@ void EventStateManager::DispatchCrossProcessEvent(WidgetEvent* aEvent,
       browserParent->Manager()->MaybeInvokeDragSession(browserParent,
                                                        aEvent->mMessage);
 
-      nsCOMPtr<nsIDragSession> dragSession = nsContentUtils::GetDragSession();
       uint32_t dropEffect = nsIDragService::DRAGDROP_ACTION_NONE;
       uint32_t action = nsIDragService::DRAGDROP_ACTION_NONE;
       nsCOMPtr<nsIPrincipal> principal;
       nsCOMPtr<nsIContentSecurityPolicy> csp;
-
+      RefPtr<nsIWidget> widget = browserParent->GetTopLevelWidget();
+      nsCOMPtr<nsIDragSession> dragSession =
+          widget ? widget->GetDragSession() : nullptr;
       if (dragSession) {
         dragSession->DragEventDispatchedToChildProcess();
         dragSession->GetDragAction(&action);
@@ -4212,8 +4213,11 @@ nsresult EventStateManager::PostHandleEvent(nsPresContext* aPresContext,
         }
       }
 
-      nsCOMPtr<nsIDragSession> dragSession = nsContentUtils::GetDragSession();
-      if (!dragSession) break;
+      // Update the drag session for our widget
+      auto* dragSession = mPresContext ? mPresContext->GetDragSession() : nullptr;
+      if (!dragSession) {
+        break;
+      }
 
       // Reset the flag.
       dragSession->SetOnlyChromeDrop(false);
@@ -4329,7 +4333,9 @@ nsresult EventStateManager::PostHandleEvent(nsPresContext* aPresContext,
       if (aEvent->mFlags.mIsSynthesizedForTests) {
         nsCOMPtr<nsIDragService> dragService =
             do_GetService("@mozilla.org/widget/dragservice;1");
-        nsCOMPtr<nsIDragSession> dragSession = nsContentUtils::GetDragSession();
+        // Get the WindowContext for the drag source from the drag session
+        // that is happening on our widget.
+        auto* dragSession = mPresContext ? mPresContext->GetDragSession() : nullptr;
         if (dragSession && dragService &&
             !dragService->NeverAllowSessionIsSynthesizedForTests()) {
           MOZ_ASSERT(dragSession->IsSynthesizedForTests());
@@ -5773,8 +5779,7 @@ void EventStateManager::UpdateDragDataTransfer(WidgetDragEvent* dragEvent) {
     return;
   }
 
-  nsCOMPtr<nsIDragSession> dragSession = nsContentUtils::GetDragSession();
-
+  auto* dragSession = mPresContext ? mPresContext->GetDragSession() : nullptr;
   if (dragSession) {
     // the initial dataTransfer is the one from the dragstart event that
     // was set on the dragSession when the drag began.

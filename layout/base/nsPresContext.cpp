@@ -3104,6 +3104,11 @@ void nsPresContext::ValidatePresShellAndDocumentReleation() const {
 
 #endif  // #ifdef DEBUG
 
+nsIDragSession* nsPresContext::GetDragSession() {
+  auto* widget = GetRootWidget();
+  return widget ? widget->GetDragSession() : nullptr;
+}
+
 nsRootPresContext::nsRootPresContext(dom::Document* aDocument,
                                      nsPresContextType aType)
     : nsPresContext(aDocument, aType) {}

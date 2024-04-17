@@ -6306,15 +6306,6 @@ void nsContentUtils::HidePopupsInDocument(Document* aDocument) {
 }
 
 /* static */
-already_AddRefed<nsIDragSession> nsContentUtils::GetDragSession() {
-  nsCOMPtr<nsIDragSession> dragSession;
-  nsCOMPtr<nsIDragService> dragService =
-      do_GetService("@mozilla.org/widget/dragservice;1");
-  if (dragService) dragService->GetCurrentSession(getter_AddRefs(dragSession));
-  return dragSession.forget();
-}
-
-/* static */
 nsresult nsContentUtils::SetDataTransferInEvent(WidgetDragEvent* aDragEvent) {
   if (aDragEvent->mDataTransfer || !aDragEvent->IsTrusted()) {
     return NS_OK;
@@ -6326,7 +6317,9 @@ nsresult nsContentUtils::SetDataTransferInEvent(WidgetDragEvent* aDragEvent) {
   NS_ASSERTION(aDragEvent->mMessage != eDragStart,
                "draggesture event created without a dataTransfer");
 
-  nsCOMPtr<nsIDragSession> dragSession = GetDragSession();
+  MOZ_ASSERT(aDragEvent->mWidget);
+  NS_ENSURE_TRUE(aDragEvent->mWidget, NS_ERROR_NULL_POINTER);
+  nsCOMPtr<nsIDragSession> dragSession = aDragEvent->mWidget->GetDragSession();
   NS_ENSURE_TRUE(dragSession, NS_OK);  // no drag in progress
 
   RefPtr<DataTransfer> initialDataTransfer = dragSession->GetDataTransfer();

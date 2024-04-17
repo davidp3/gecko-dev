@@ -2203,11 +2203,6 @@ class nsContentUtils {
   MOZ_CAN_RUN_SCRIPT_BOUNDARY static void HidePopupsInDocument(
       Document* aDocument);
 
-  /**
-   * Retrieve the current drag session, or null if no drag is currently occuring
-   */
-  static already_AddRefed<nsIDragSession> GetDragSession();
-
   /*
    * Initialize and set the dataTransfer field of an WidgetDragEvent.
    */
