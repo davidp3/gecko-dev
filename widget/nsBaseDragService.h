@@ -161,10 +161,28 @@ class nsBaseDragService : public nsIDragService, public nsBaseDragSession {
 
   // TODO: This is part of a hack used by nsIWidget to get the singleton
   // session.  It will be removed at the end of the patch series.
-  bool IsDragging() { return mDoingDrag && mSuppressLevel == 0; }
+  bool IsDragging() { return mDoingDrag; }
 
  protected:
   virtual ~nsBaseDragService();
+
+  /**
+   * Starts a modal drag session with an array of transaferables.
+   *
+   * @param  aPrincipal - the triggering principal of the drag, or null if
+   *                      it's from browser chrome or OS
+   * @param aCsp - The csp of the triggering Document
+   * @param  aTransferables - an array of transferables to be dragged
+   * @param  aActionType - specified which of copy/move/link are allowed
+   * @param  aContentPolicyType - the contentPolicyType that will be
+   *           passed to the loadInfo when creating a new channel
+   *           (defaults to TYPE_OTHER)
+   */
+  MOZ_CAN_RUN_SCRIPT virtual nsresult InvokeDragSession(
+      nsIWidget* aWidget, nsINode* aDOMNode, nsIPrincipal* aPrincipal,
+      nsIContentSecurityPolicy* aCsp, nsICookieJarSettings* aCookieJarSettings,
+      nsIArray* aTransferableArray, uint32_t aActionType,
+      nsContentPolicyType aContentPolicyType = nsIContentPolicy::TYPE_OTHER);
 
   /**
    * Called from nsBaseDragService to initiate a platform drag from a source
@@ -228,8 +246,6 @@ class nsBaseDragService : public nsIDragService, public nsBaseDragSession {
 
   // remote drag data
   RefPtr<mozilla::dom::RemoteDragStartData> mDragStartData;
-
-  uint32_t mSuppressLevel;
 
   // The input source of the drag event. Possible values are from MouseEvent.
   uint16_t mInputSource;

@@ -91,6 +91,9 @@
 #include "nsView.h"
 #include "nsViewManager.h"
 
+// TODO: Temporary.
+#include "nsBaseDragService.h"
+
 static mozilla::LazyLogModule sBaseWidgetLog("BaseWidget");
 
 #ifdef DEBUG
@@ -2498,10 +2501,40 @@ nsIDragSession* nsIWidget::GetDragSession() {
   // TODO: This is still a hack to get at the singleton when there is an
   // active session.  This will be changed in a later patch.
   nsCOMPtr<nsIDragSession> dragSession;
-  if (static_cast<nsBaseDragService*>(dragService.get())->IsDragging()) {
+  if (mDragSuppressLevel == 0 &&
+      static_cast<nsBaseDragService*>(dragService.get())->IsDragging()) {
     dragSession = do_QueryInterface(dragService);
   }
   return dragSession;
+}
+
+void nsIWidget::SuppressDragging() {
+  nsCOMPtr<nsIDragService> dragService =
+      do_GetService("@mozilla.org/widget/dragservice;1");
+  if (!dragService) {
+    return;
+  }
+  dragService->EndDragSession(false, 0);
+  ++mDragSuppressLevel;
+}
+
+void nsIWidget::UnsuppressDragging() {
+  MOZ_ASSERT(mDragSuppressLevel > 0);
+  --mDragSuppressLevel;
+}
+
+void nsIWidget::MaybeSuppressDraggingForResizing() {
+  if (mMouseDownMayResize && !mDragDisabledForResizing) {
+    mDragDisabledForResizing = true;
+    SuppressDragging();
+  }
+}
+
+void nsIWidget::MaybeUnsuppressDraggingForResizing() {
+  if (mDragDisabledForResizing) {
+    mDragDisabledForResizing = false;
+    UnsuppressDragging();
+  }
 }
 
 namespace mozilla::widget {

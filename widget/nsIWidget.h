@@ -410,9 +410,10 @@ class nsIWidget : public nsISupports {
         mPrevSibling(nullptr),
         mOnDestroyCalled(false),
         mWindowType(WindowType::Child),
-        mZIndex(0)
-
-  {
+        mZIndex(0),
+        mDragSuppressLevel(0),
+        mMouseDownMayResize(false),
+        mDragDisabledForResizing(false) {
     ClearNativeTouchSequence(nullptr);
   }
 
@@ -2120,6 +2121,23 @@ class nsIWidget : public nsISupports {
    */
   nsIDragSession* GetDragSession();
 
+  /**
+   * Increase/decrease dragging suppress level by one.
+   * If level is greater than one, dragging from/to this widget is disabled.
+   * Note that we separate functions for suppressing/unsuppressing to
+   * distinguish MOZ_CAN_RUN_SCRIPT.
+   */
+  MOZ_CAN_RUN_SCRIPT void SuppressDragging();
+  void UnsuppressDragging();
+  MOZ_CAN_RUN_SCRIPT void MaybeSuppressDraggingForResizing();
+  void MaybeUnsuppressDraggingForResizing();
+
+  bool DraggingIsSuppressed() { return !!mDragSuppressLevel; }
+
+  void SetMouseDownMayResize(bool aMouseDownMayResize) {
+    mMouseDownMayResize = aMouseDownMayResize;
+  }
+
  protected:
   // keep the list of children.  We also keep track of our siblings.
   // The ownership model is as follows: parent holds a strong ref to
@@ -2135,6 +2153,9 @@ class nsIWidget : public nsISupports {
   bool mOnDestroyCalled;
   WindowType mWindowType;
   int32_t mZIndex;
+  uint32_t mDragSuppressLevel;
+  bool mMouseDownMayResize;
+  bool mDragDisabledForResizing;
 };
 
 NS_DEFINE_STATIC_IID_ACCESSOR(nsIWidget, NS_IWIDGET_IID)

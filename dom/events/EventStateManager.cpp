@@ -5598,9 +5598,7 @@ void EventStateManager::SetPointerLock(nsIWidget* aWidget,
         sLastRefPoint + aWidget->WidgetToScreenOffset(), nullptr);
 
     // Suppress DnD
-    if (dragService) {
-      dragService->Suppress();
-    }
+    aWidget->SuppressDragging();
 
     // Activate native pointer lock on platforms where it is required (Wayland)
     aWidget->LockNativePointer();
@@ -5626,9 +5624,7 @@ void EventStateManager::SetPointerLock(nsIWidget* aWidget,
     }
 
     // Unsuppress DnD
-    if (dragService) {
-      dragService->Unsuppress();
-    }
+    aWidget->UnsuppressDragging();
   }
 }
 

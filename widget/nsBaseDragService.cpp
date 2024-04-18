@@ -67,7 +67,6 @@ nsBaseDragService::nsBaseDragService()
     : mEndingSession(false),
       mHasImage(false),
       mContentPolicyType(nsIContentPolicy::TYPE_OTHER),
-      mSuppressLevel(0),
       mInputSource(MouseEvent_Binding::MOZ_SOURCE_MOUSE) {}
 
 nsBaseDragService::~nsBaseDragService() = default;
@@ -299,16 +298,15 @@ NS_IMETHODIMP nsBaseDragSession::SetDragEndPointForTests(int32_t aScreenX,
 }
 
 //-------------------------------------------------------------------------
-NS_IMETHODIMP
-nsBaseDragService::InvokeDragSession(
-    nsINode* aDOMNode, nsIPrincipal* aPrincipal, nsIContentSecurityPolicy* aCsp,
-    nsICookieJarSettings* aCookieJarSettings, nsIArray* aTransferableArray,
-    uint32_t aActionType,
-    nsContentPolicyType aContentPolicyType = nsIContentPolicy::TYPE_OTHER) {
+nsresult nsBaseDragService::InvokeDragSession(
+    nsIWidget* aWidget, nsINode* aDOMNode, nsIPrincipal* aPrincipal,
+    nsIContentSecurityPolicy* aCsp, nsICookieJarSettings* aCookieJarSettings,
+    nsIArray* aTransferableArray, uint32_t aActionType,
+    nsContentPolicyType aContentPolicyType) {
   AUTO_PROFILER_LABEL("nsBaseDragService::InvokeDragSession", OTHER);
 
   NS_ENSURE_TRUE(aDOMNode, NS_ERROR_INVALID_ARG);
-  NS_ENSURE_TRUE(mSuppressLevel == 0, NS_ERROR_FAILURE);
+  NS_ENSURE_TRUE(!aWidget->DraggingIsSuppressed(), NS_ERROR_FAILURE);
 
   // stash the document of the dom node
   mSourceDocument = aDOMNode->OwnerDoc();
@@ -397,9 +395,13 @@ nsBaseDragService::InvokeDragSessionWithImage(
     nsICookieJarSettings* aCookieJarSettings, nsIArray* aTransferableArray,
     uint32_t aActionType, nsINode* aImage, int32_t aImageX, int32_t aImageY,
     DragEvent* aDragEvent, DataTransfer* aDataTransfer) {
+  nsCOMPtr<nsIWidget> widget =
+      aDragEvent->WidgetEventPtr()->AsDragEvent()->mWidget;
+  MOZ_ASSERT(widget);
+
   NS_ENSURE_TRUE(aDragEvent, NS_ERROR_NULL_POINTER);
   NS_ENSURE_TRUE(aDataTransfer, NS_ERROR_NULL_POINTER);
-  NS_ENSURE_TRUE(mSuppressLevel == 0, NS_ERROR_FAILURE);
+  NS_ENSURE_TRUE(!widget->DraggingIsSuppressed(), NS_ERROR_FAILURE);
 
   mSessionIsSynthesizedForTests =
       aDragEvent->WidgetEventPtr()->mFlags.mIsSynthesizedForTests &&
@@ -437,8 +439,8 @@ nsBaseDragService::InvokeDragSessionWithImage(
   }
 
   nsresult rv = InvokeDragSession(
-      aDOMNode, aPrincipal, aCsp, aCookieJarSettings, aTransferableArray,
-      aActionType, nsIContentPolicy::TYPE_INTERNAL_IMAGE);
+      widget, aDOMNode, aPrincipal, aCsp, aCookieJarSettings,
+      aTransferableArray, aActionType, nsIContentPolicy::TYPE_INTERNAL_IMAGE);
   mRegion = Nothing();
   return rv;
 }
@@ -449,9 +451,13 @@ nsBaseDragService::InvokeDragSessionWithRemoteImage(
     nsICookieJarSettings* aCookieJarSettings, nsIArray* aTransferableArray,
     uint32_t aActionType, RemoteDragStartData* aDragStartData,
     DragEvent* aDragEvent, DataTransfer* aDataTransfer) {
+  nsCOMPtr<nsIWidget> widget =
+      aDragEvent->WidgetEventPtr()->AsDragEvent()->mWidget;
+  MOZ_ASSERT(widget);
+
   NS_ENSURE_TRUE(aDragEvent, NS_ERROR_NULL_POINTER);
   NS_ENSURE_TRUE(aDataTransfer, NS_ERROR_NULL_POINTER);
-  NS_ENSURE_TRUE(mSuppressLevel == 0, NS_ERROR_FAILURE);
+  NS_ENSURE_TRUE(!widget->DraggingIsSuppressed(), NS_ERROR_FAILURE);
 
   mSessionIsSynthesizedForTests =
       aDragEvent->WidgetEventPtr()->mFlags.mIsSynthesizedForTests &&
@@ -470,8 +476,8 @@ nsBaseDragService::InvokeDragSessionWithRemoteImage(
   mInputSource = aDragEvent->InputSource(CallerType::System);
 
   nsresult rv = InvokeDragSession(
-      aDOMNode, aPrincipal, aCsp, aCookieJarSettings, aTransferableArray,
-      aActionType, nsIContentPolicy::TYPE_INTERNAL_IMAGE);
+      widget, aDOMNode, aPrincipal, aCsp, aCookieJarSettings,
+      aTransferableArray, aActionType, nsIContentPolicy::TYPE_INTERNAL_IMAGE);
   mRegion = Nothing();
   return rv;
 }
@@ -482,9 +488,13 @@ nsBaseDragService::InvokeDragSessionWithSelection(
     nsIContentSecurityPolicy* aCsp, nsICookieJarSettings* aCookieJarSettings,
     nsIArray* aTransferableArray, uint32_t aActionType, DragEvent* aDragEvent,
     DataTransfer* aDataTransfer) {
+  nsCOMPtr<nsIWidget> widget =
+      aDragEvent->WidgetEventPtr()->AsDragEvent()->mWidget;
+  MOZ_ASSERT(widget);
+
   NS_ENSURE_TRUE(aSelection, NS_ERROR_NULL_POINTER);
   NS_ENSURE_TRUE(aDragEvent, NS_ERROR_NULL_POINTER);
-  NS_ENSURE_TRUE(mSuppressLevel == 0, NS_ERROR_FAILURE);
+  NS_ENSURE_TRUE(!widget->DraggingIsSuppressed(), NS_ERROR_FAILURE);
 
   mSessionIsSynthesizedForTests =
       aDragEvent->WidgetEventPtr()->mFlags.mIsSynthesizedForTests &&
@@ -510,7 +520,7 @@ nsBaseDragService::InvokeDragSessionWithSelection(
   mSourceTopWindowContext =
       mSourceWindowContext ? mSourceWindowContext->TopWindowContext() : nullptr;
 
-  return InvokeDragSession(node, aPrincipal, aCsp, aCookieJarSettings,
+  return InvokeDragSession(widget, node, aPrincipal, aCsp, aCookieJarSettings,
                            aTransferableArray, aActionType,
                            nsIContentPolicy::TYPE_OTHER);
 }
@@ -598,7 +608,7 @@ nsBaseDragService::EndDragSession(bool aDoneDrag, uint32_t aKeyModifiers) {
 
   mEndingSession = true;
 
-  if (aDoneDrag && !mSuppressLevel) {
+  if (aDoneDrag) {
     FireDragEventAtSource(eDragEnd, aKeyModifiers);
   }
 
@@ -687,7 +697,7 @@ void nsBaseDragSession::DiscardInternalTransferData() {
 NS_IMETHODIMP
 nsBaseDragService::FireDragEventAtSource(EventMessage aEventMessage,
                                          uint32_t aKeyModifiers) {
-  if (!mSourceNode || !mSourceDocument || mSuppressLevel) {
+  if (!mSourceNode || !mSourceDocument) {
     return NS_OK;
   }
   RefPtr<PresShell> presShell = mSourceDocument->GetPresShell();
@@ -697,6 +707,9 @@ nsBaseDragService::FireDragEventAtSource(EventMessage aEventMessage,
 
   RefPtr<nsPresContext> pc = presShell->GetPresContext();
   nsCOMPtr<nsIWidget> widget = pc ? pc->GetRootWidget() : nullptr;
+  if (widget->DraggingIsSuppressed()) {
+    return NS_OK;
+  }
 
   nsEventStatus status = nsEventStatus_eIgnore;
   WidgetDragEvent event(true, aEventMessage, widget);
@@ -969,19 +982,6 @@ nsresult nsBaseDragService::DrawDragForImage(
   }
 
   return result;
-}
-
-NS_IMETHODIMP
-nsBaseDragService::Suppress() {
-  EndDragSession(false, 0);
-  ++mSuppressLevel;
-  return NS_OK;
-}
-
-NS_IMETHODIMP
-nsBaseDragService::Unsuppress() {
-  --mSuppressLevel;
-  return NS_OK;
 }
 
 NS_IMETHODIMP
