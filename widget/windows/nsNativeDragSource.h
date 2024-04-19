@@ -11,6 +11,8 @@
 #include "mozilla/Attributes.h"
 #include "mozilla/RefPtr.h"
 
+class nsIDragSession;
+
 namespace mozilla {
 namespace dom {
 class DataTransfer;
@@ -27,7 +29,8 @@ class nsNativeDragSource final : public IDropSource {
  public:
   // construct an nsNativeDragSource referencing adapter
   // nsNativeDragSource(nsIDragSource * adapter);
-  explicit nsNativeDragSource(mozilla::dom::DataTransfer* aDataTransfer);
+  explicit nsNativeDragSource(nsIDragSession* aDragSession,
+                              mozilla::dom::DataTransfer* aDataTransfer);
   ~nsNativeDragSource();
 
   // IUnknown methods - see iunknown.h for documentation
@@ -52,6 +55,9 @@ class nsNativeDragSource final : public IDropSource {
   bool UserCancelled() { return mUserCancelled; }
 
  protected:
+  // The drag session that this is the source of
+  RefPtr<nsIDragSession> mDragSession;
+
   // Reference count
   ULONG m_cRef;
 

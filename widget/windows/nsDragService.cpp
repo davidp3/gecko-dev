@@ -234,7 +234,7 @@ nsresult nsDragService::StartInvokingDragSession(IDataObject* aDataObj,
   // To do the drag we need to create an object that
   // implements the IDataObject interface (for OLE)
   RefPtr<nsNativeDragSource> nativeDragSrc =
-      new nsNativeDragSource(mDataTransfer);
+      new nsNativeDragSource(this, mDataTransfer);
 
   // Now figure out what the native drag effect should be
   DWORD winDropRes;

@@ -10,6 +10,7 @@
 #include "nsToolkit.h"
 #include "nsWidgetsCID.h"
 #include "nsIDragService.h"
+#include "nsIDragSession.h"
 #include "nsServiceManagerUtils.h"
 #include "mozilla/dom/DataTransfer.h"
 
@@ -17,8 +18,11 @@
  * class nsNativeDragSource
  */
 nsNativeDragSource::nsNativeDragSource(
-    mozilla::dom::DataTransfer* aDataTransfer)
-    : m_cRef(0), m_hCursor(nullptr), mUserCancelled(false) {
+    nsIDragSession* aDragSession, mozilla::dom::DataTransfer* aDataTransfer)
+    : mDragSession(aDragSession),
+      m_cRef(0),
+      m_hCursor(nullptr),
+      mUserCancelled(false) {
   mDataTransfer = aDataTransfer;
 }
 
@@ -57,12 +61,8 @@ nsNativeDragSource::Release(void) {
 
 STDMETHODIMP
 nsNativeDragSource::QueryContinueDrag(BOOL fEsc, DWORD grfKeyState) {
-  nsCOMPtr<nsIDragService> dragService =
-      do_GetService("@mozilla.org/widget/dragservice;1");
-  if (dragService) {
-    DWORD pos = ::GetMessagePos();
-    dragService->DragMoved(GET_X_LPARAM(pos), GET_Y_LPARAM(pos));
-  }
+  DWORD pos = ::GetMessagePos();
+  mDragSession->DragMoved(GET_X_LPARAM(pos), GET_Y_LPARAM(pos));
 
   if (fEsc) {
     mUserCancelled = true;
