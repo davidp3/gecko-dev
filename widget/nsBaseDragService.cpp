@@ -41,7 +41,6 @@
 #include "mozilla/dom/Document.h"
 #include "mozilla/dom/DocumentInlines.h"
 #include "mozilla/dom/DragEvent.h"
-#include "mozilla/dom/MouseEventBinding.h"
 #include "mozilla/dom/Selection.h"
 #include "mozilla/gfx/2D.h"
 #include "nsFrameLoader.h"
@@ -66,8 +65,7 @@ LazyLogModule sWidgetDragServiceLog("WidgetDragService");
 nsBaseDragService::nsBaseDragService()
     : mEndingSession(false),
       mHasImage(false),
-      mContentPolicyType(nsIContentPolicy::TYPE_OTHER),
-      mInputSource(MouseEvent_Binding::MOZ_SOURCE_MOUSE) {}
+      mContentPolicyType(nsIContentPolicy::TYPE_OTHER) {}
 
 nsBaseDragService::~nsBaseDragService() = default;
 
@@ -695,7 +693,7 @@ void nsBaseDragSession::DiscardInternalTransferData() {
 }
 
 NS_IMETHODIMP
-nsBaseDragService::FireDragEventAtSource(EventMessage aEventMessage,
+nsBaseDragSession::FireDragEventAtSource(EventMessage aEventMessage,
                                          uint32_t aKeyModifiers) {
   if (!mSourceNode || !mSourceDocument) {
     return NS_OK;

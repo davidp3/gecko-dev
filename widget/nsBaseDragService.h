@@ -15,6 +15,7 @@
 #include "mozilla/RefPtr.h"
 #include "mozilla/dom/ContentParent.h"
 #include "mozilla/dom/HTMLCanvasElement.h"
+#include "mozilla/dom/MouseEventBinding.h"
 #include "mozilla/dom/RemoteDragStartData.h"
 #include "mozilla/Logging.h"
 #include "nsTArray.h"
@@ -125,6 +126,9 @@ class nsBaseDragSession : public nsIDragSession {
   // for tests.
   uint32_t mEffectAllowedForTests =
       nsIDragService::DRAGDROP_ACTION_UNINITIALIZED;
+
+  // The input source of the drag event. Possible values are from MouseEvent.
+  uint16_t mInputSource = mozilla::dom::MouseEvent_Binding::MOZ_SOURCE_MOUSE;
 
   bool mDoingDrag = false;
 
@@ -246,9 +250,6 @@ class nsBaseDragService : public nsIDragService, public nsBaseDragSession {
 
   // remote drag data
   RefPtr<mozilla::dom::RemoteDragStartData> mDragStartData;
-
-  // The input source of the drag event. Possible values are from MouseEvent.
-  uint16_t mInputSource;
 
   nsTArray<RefPtr<mozilla::dom::ContentParent>> mChildProcesses;
 

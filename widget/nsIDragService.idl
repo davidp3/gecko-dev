@@ -150,13 +150,6 @@ interface nsIDragService : nsISupports
   void endDragSession(in boolean aDoneDrag,
                       [optional] in unsigned long aKeyModifiers);
 
-  /**
-   * Fire a drag event at the source of the drag
-   */
-  [noscript, can_run_script]
-  void fireDragEventAtSource(in EventMessage aEventMessage,
-                             in unsigned long aKeyModifiers);
-
   [notxpcom, nostdcall] boolean maybeAddChildProcess(in ContentParentPtr aChild);
   [notxpcom, nostdcall] boolean removeAllChildProcesses();
 

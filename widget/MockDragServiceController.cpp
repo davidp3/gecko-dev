@@ -173,8 +173,8 @@ MockDragServiceController::SendEvent(
     } break;
     case EventType::eDragOver: {
       NS_ENSURE_TRUE(currentDragSession, NS_ERROR_UNEXPECTED);
-      nsresult rv =
-          ds->FireDragEventAtSource(EventMessage::eDrag, aKeyModifiers);
+      nsresult rv = currentDragSession->FireDragEventAtSource(
+          EventMessage::eDrag, aKeyModifiers);
       currentDragSession->SetDragAction(nsIDragService::DRAGDROP_ACTION_MOVE);
       NS_ENSURE_SUCCESS(rv, rv);
       widget->DispatchInputEvent(widgetEvent.get());
