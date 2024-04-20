@@ -21,6 +21,8 @@ interface nsIMockDragServiceController;
 %{C++
 #include "mozilla/EventForwards.h"
 
+class nsIWidget;
+
 namespace mozilla {
 namespace dom {
 class BrowserParent;
@@ -34,6 +36,7 @@ class RemoteDragStartData;
 [ptr] native DataTransferPtr(mozilla::dom::DataTransfer);
 [ptr] native RemoteDragStartDataPtr(mozilla::dom::RemoteDragStartData);
 native EventMessage(mozilla::EventMessage);
+[ptr] native nsIWidgetPtr(nsIWidget);
 
 [scriptable, uuid(ebd6b3a2-af16-43af-a698-3091a087dd62), builtinclass]
 interface nsIDragService : nsISupports
@@ -124,8 +127,18 @@ interface nsIDragService : nsISupports
   /**
     * Tells the Drag Service to start a drag session. This is called when
     * an external drag occurs
+    *
+    * @param aWin           Window to start the drag over.
     */
-  void startDragSession() ;
+  void startDragSessionFromWindow(in mozIDOMWindowProxy aWin);
+
+  /**
+    * Version of startDragSessionFromWindow that takes a widget.
+    *
+    * @param aWidget         Widget to start the drag over.
+    */
+  [noscript]
+  void startDragSession(in nsIWidgetPtr aWidget);
 
   /**
    * Similar to startDragSession(), automated tests may want to start

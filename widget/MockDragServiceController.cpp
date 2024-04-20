@@ -19,7 +19,7 @@ NS_IMPL_ISUPPORTS(MockDragServiceController, nsIMockDragServiceController)
 class MockDragService : public nsBaseDragService {
  public:
   MOZ_CAN_RUN_SCRIPT nsresult
-  InvokeDragSessionImpl(nsIArray* aTransferableArray,
+  InvokeDragSessionImpl(nsIWidget* aWidget, nsIArray* aTransferableArray,
                         const mozilla::Maybe<mozilla::CSSIntRegion>& aRegion,
                         uint32_t aActionType) override {
     // In Windows' nsDragService, InvokeDragSessionImpl would establish a
@@ -31,7 +31,7 @@ class MockDragService : public nsBaseDragService {
     // mDragAction is not yet handled properly in the MockDragService.
     // This should be updated with each drag event.  Instead, we always MOVE.
     mDragAction = DRAGDROP_ACTION_MOVE;
-    StartDragSession();
+    StartDragSession(aWidget);
     return NS_OK;
   }
 
@@ -136,9 +136,9 @@ MockDragServiceController::SendEvent(
 
   if (aEventType == EventType::eDragEnter) {
     // We expect StartDragSession to return an "error" when a drag session
-    // already exists, which it will since we are testing dragging from
-    // inside Gecko, so we don't check the return value.
-    ds->StartDragSession();
+    // already exists, which it will if we are dragging in the same widget,
+    // so we don't check the return value.
+    ds->StartDragSession(widget);
   }
 
   nsCOMPtr<nsIDragSession> currentDragSession = widget->GetDragSession();

@@ -4109,7 +4109,7 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
   }
 
   if (aMessage == eDragEnter) {
-    mDragService->StartDragSession();
+    mDragService->StartDragSession(mGeckoChild);
   }
 
   nsCOMPtr<nsIDragSession> dragSession = mGeckoChild->GetDragSession();

@@ -376,7 +376,8 @@ nsresult nsBaseDragService::InvokeDragSession(
     }
   }
 
-  nsresult rv = InvokeDragSessionImpl(aTransferableArray, mRegion, aActionType);
+  nsresult rv =
+      InvokeDragSessionImpl(aWidget, aTransferableArray, mRegion, aActionType);
 
   if (NS_FAILED(rv)) {
     // Set mDoingDrag so that EndDragSession cleans up and sends the dragend
@@ -550,14 +551,26 @@ nsBaseDragService::GetCurrentSession(mozIDOMWindowProxy* aWindowProxy,
 
 //-------------------------------------------------------------------------
 NS_IMETHODIMP
-nsBaseDragService::StartDragSession() {
+nsBaseDragService::StartDragSessionFromWindow(mozIDOMWindowProxy* aWinProxy) {
+  MOZ_ASSERT(aWinProxy);
+
+  RefPtr<nsGlobalWindowOuter> outerWin = nsGlobalWindowOuter::Cast(aWinProxy);
+  RefPtr<nsIWidget> widget = outerWin->GetMainWidget();
+  return StartDragSession(widget);
+}
+
+NS_IMETHODIMP
+nsBaseDragService::StartDragSession(nsIWidget* aWidget) {
+  if (!aWidget) {
+    return NS_ERROR_NULL_POINTER;
+  }
   if (mDoingDrag) {
     return NS_ERROR_FAILURE;
   }
+
   mDoingDrag = true;
   // By default dispatch drop also to content.
   mOnlyChromeDrop = false;
-
   return NS_OK;
 }
 
@@ -567,7 +580,7 @@ NS_IMETHODIMP nsBaseDragService::StartDragSessionForTests(
   MOZ_ASSERT(!mNeverAllowSessionIsSynthesizedForTests);
   MOZ_ASSERT(aWinProxy);
 
-  if (NS_WARN_IF(NS_FAILED(StartDragSession()))) {
+  if (NS_WARN_IF(NS_FAILED(StartDragSessionFromWindow(aWinProxy)))) {
     return NS_ERROR_FAILURE;
   }
   mDragAction = aAllowedEffect;
