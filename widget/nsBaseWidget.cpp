@@ -139,6 +139,18 @@ NS_IMPL_ISUPPORTS(nsBaseWidget, nsIWidget, nsISupportsWeakReference)
 //
 //-------------------------------------------------------------------------
 
+nsIWidget::nsIWidget()
+    : mLastChild(nullptr),
+      mPrevSibling(nullptr),
+      mOnDestroyCalled(false),
+      mWindowType(WindowType::Child),
+      mZIndex(0),
+      mDragSuppressLevel(0),
+      mMouseDownMayResize(false),
+      mDragDisabledForResizing(false) {
+  ClearNativeTouchSequence(nullptr);
+}
+
 nsBaseWidget::nsBaseWidget() : nsBaseWidget(BorderStyle::None) {}
 
 nsBaseWidget::nsBaseWidget(BorderStyle aBorderStyle)
@@ -393,6 +405,8 @@ void nsBaseWidget::FreeLocalesChangedObserver() {
 // nsBaseWidget destructor
 //
 //-------------------------------------------------------------------------
+
+nsIWidget::~nsIWidget() = default;
 
 nsBaseWidget::~nsBaseWidget() {
   if (mSwipeTracker) {
@@ -2535,6 +2549,47 @@ void nsIWidget::MaybeUnsuppressDraggingForResizing() {
     mDragDisabledForResizing = false;
     UnsuppressDragging();
   }
+}
+
+bool nsIWidget::MaybeAddDraggingBrowser(BrowserParent* aParent) {
+  MOZ_ASSERT(aParent);
+  RefPtr<nsIDragSession> session = GetDragSession();
+  if (session) {
+    MOZ_ASSERT(mBrowsers.IsEmpty());
+    return session->MaybeAddBrowser(aParent);
+  }
+  for (auto& weakBrowser : mBrowsers) {
+    nsCOMPtr<BrowserParent> browser = do_QueryReferent(weakBrowser);
+    if (NS_WARN_IF(browser == aParent)) {
+      return false;
+    }
+  }
+  mBrowsers.AppendElement(do_GetWeakReference(aParent));
+  return true;
+}
+
+void nsIWidget::RemoveAllDraggingBrowsers() {
+  RefPtr<nsIDragSession> session = GetDragSession();
+  if (session) {
+    MOZ_ASSERT(mBrowsers.IsEmpty());
+    session->RemoveAllBrowsers();
+    return;
+  }
+  for (auto& weakBrowser : mBrowsers) {
+    nsCOMPtr<BrowserParent> bp = do_QueryReferent(weakBrowser);
+    if (NS_WARN_IF(!bp)) {
+      continue;
+    }
+
+    mozilla::Unused << bp->SendEndDragSession(
+        true, false, LayoutDeviceIntPoint(), 0,
+        nsIDragService::DRAGDROP_ACTION_NONE);
+  }
+  mBrowsers.Clear();
+}
+
+nsIWidget::WeakBrowserArray nsIWidget::TakeDragSessionBrowsers() {
+  return std::move(mBrowsers);
 }
 
 namespace mozilla::widget {

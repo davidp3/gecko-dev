@@ -318,6 +318,7 @@ nsresult nsBaseDragService::InvokeDragSession(
           mSourceNode->GetClosestNativeAnonymousSubtreeRootParentOrHost());
   mContentPolicyType = aContentPolicyType;
   mEndDragPoint = LayoutDeviceIntPoint(0, 0);
+  mBrowsers = aWidget->TakeDragSessionBrowsers();
 
   // When the mouse goes down, the selection code starts a mouse
   // capture. However, this gets in the way of determining drag
@@ -1033,7 +1034,7 @@ nsBaseDragSession::DragEventDispatchedToChildProcess() {
   return NS_OK;
 }
 
-bool nsBaseDragService::MaybeAddBrowser(BrowserParent* aBP) {
+bool nsBaseDragSession::MaybeAddBrowser(BrowserParent* aBP) {
   for (auto& weakBrowser : mBrowsers) {
     nsCOMPtr<BrowserParent> browser = do_QueryReferent(weakBrowser);
     if (browser == aBP) {
@@ -1044,10 +1045,10 @@ bool nsBaseDragService::MaybeAddBrowser(BrowserParent* aBP) {
   return true;
 }
 
-bool nsBaseDragService::RemoveAllBrowsers() {
+bool nsBaseDragSession::RemoveAllBrowsers() {
   for (auto& weakBrowser : mBrowsers) {
     nsCOMPtr<BrowserParent> browser = do_QueryReferent(weakBrowser);
-    if (!browser) {
+    if (NS_WARN_IF(!browser)) {
       continue;
     }
     mozilla::Unused << browser->SendEndDragSession(
@@ -1059,7 +1060,7 @@ bool nsBaseDragService::RemoveAllBrowsers() {
   return true;
 }
 
-bool nsBaseDragService::MustUpdateDataTransfer(EventMessage aMessage) {
+bool nsBaseDragSession::MustUpdateDataTransfer(EventMessage aMessage) {
   return false;
 }
 

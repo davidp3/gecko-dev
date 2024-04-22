@@ -3870,11 +3870,8 @@ mozilla::ipc::IPCResult BrowserParent::RecvInvokeDragSession(
     }
   }
 
-  nsCOMPtr<nsIDragService> dragService =
-      do_GetService("@mozilla.org/widget/dragservice;1");
-  if (dragService) {
-    dragService->MaybeAddBrowser(this);
-  }
+  RefPtr<nsIWidget> widget = GetTopLevelWidget();
+  widget->MaybeAddDraggingBrowser(this);
 
   presShell->GetPresContext()
       ->EventStateManager()
@@ -3915,15 +3912,13 @@ void BrowserParent::MaybeInvokeDragSession(EventMessage aMessage) {
   // priority when there is an active dnd session.
   Manager()->SetInputPriorityEventEnabled(false);
 
-  nsCOMPtr<nsIDragService> dragService =
-      do_GetService("@mozilla.org/widget/dragservice;1");
   RefPtr<nsIWidget> widget = GetTopLevelWidget();
-  if (!dragService || !widget || !GetBrowsingContext()) {
+  if (!widget) {
     return;
   }
 
-  if (dragService->MaybeAddBrowser(this)) {
-    nsIDragSession* session = widget->GetDragSession();
+  nsIDragSession* session = widget->GetDragSession();
+  if (widget->MaybeAddDraggingBrowser(this)) {
     if (session) {
       // We need to send transferable data to child process.
       nsTArray<IPCTransferableData> ipcTransferables;
@@ -3941,15 +3936,12 @@ void BrowserParent::MaybeInvokeDragSession(EventMessage aMessage) {
     return;
   }
 
-  if (dragService->MustUpdateDataTransfer(aMessage)) {
-    nsIDragSession* session = widget->GetDragSession();
-    if (session) {
-      // We need to send transferable data to child process.
-      nsTArray<IPCTransferableData> ipcTransferables;
-      GetIPCTransferableData(session, ipcTransferables);
-      mozilla::Unused << SendUpdateDragSession(
-          std::move(ipcTransferables), aMessage);
-    }
+  if (session && session->MustUpdateDataTransfer(aMessage)) {
+    // We need to send transferable data to child process.
+    nsTArray<IPCTransferableData> ipcTransferables;
+    GetIPCTransferableData(session, ipcTransferables);
+    mozilla::Unused << SendUpdateDragSession(
+        std::move(ipcTransferables), aMessage);
   }
 }
 

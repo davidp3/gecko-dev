@@ -110,6 +110,9 @@ class nsBaseDragSession : public nsIDragSession {
   // opened and moved instead of using a drag image.
   nsCOMPtr<mozilla::dom::Element> mDragPopup;
 
+  // Weak references to PBrowsers that are currently engaged in drags
+  nsTArray<nsWeakPtr> mBrowsers;
+
   // the screen position where drag gesture occurred, used for positioning the
   // drag image.
   mozilla::CSSIntPoint mScreenPosition;
@@ -249,9 +252,6 @@ class nsBaseDragService : public nsIDragService, public nsBaseDragSession {
 
   // remote drag data
   RefPtr<mozilla::dom::RemoteDragStartData> mDragStartData;
-
-  // Weak references to PBrowsers that are currently engaged in drags
-  nsTArray<nsWeakPtr> mBrowsers;
 
   // Sub-region for tree-selections.
   mozilla::Maybe<mozilla::CSSIntRegion> mRegion;

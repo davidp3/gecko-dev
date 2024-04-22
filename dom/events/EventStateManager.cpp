@@ -2397,15 +2397,10 @@ void EventStateManager::StopTrackingDragGesture(bool aClearInChildProcesses) {
   // still happening. Inform any child processes with active drags that the drag
   // should be stopped.
   if (aClearInChildProcesses) {
-    nsCOMPtr<nsIDragService> dragService =
-        do_GetService("@mozilla.org/widget/dragservice;1");
-    RefPtr<nsIDragSession> session;
-    if (mPresContext->GetRootWidget()) {
-      session = mPresContext->GetRootWidget()->GetDragSession();
-    }
-    if (dragService && !session) {
+    RefPtr<nsIWidget> widget = mPresContext->GetRootWidget();
+    if (widget && !widget->GetDragSession()) {
       // Only notify if there isn't a drag session active.
-      dragService->RemoveAllBrowsers();
+      widget->RemoveAllDraggingBrowsers();
     }
   }
 }

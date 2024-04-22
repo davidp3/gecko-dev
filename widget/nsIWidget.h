@@ -9,6 +9,7 @@
 
 #include <cmath>
 #include <cstdint>
+
 #include "imgIContainer.h"
 #include "ErrorList.h"
 #include "Units.h"
@@ -35,6 +36,7 @@
 #include "nsISupports.h"
 #include "nsITheme.h"
 #include "nsITimer.h"
+#include "nsIWeakReferenceUtils.h"
 #include "nsIWidgetListener.h"
 #include "nsRect.h"
 #include "nsSize.h"
@@ -76,6 +78,7 @@ class Shmem;
 #endif  // defined(MOZ_WIDGET_ANDROID)
 namespace dom {
 class BrowserChild;
+class BrowserParent;
 enum class CallerType : uint32_t;
 }  // namespace dom
 class WindowRenderer;
@@ -405,17 +408,7 @@ class nsIWidget : public nsISupports {
 
   NS_DECLARE_STATIC_IID_ACCESSOR(NS_IWIDGET_IID)
 
-  nsIWidget()
-      : mLastChild(nullptr),
-        mPrevSibling(nullptr),
-        mOnDestroyCalled(false),
-        mWindowType(WindowType::Child),
-        mZIndex(0),
-        mDragSuppressLevel(0),
-        mMouseDownMayResize(false),
-        mDragDisabledForResizing(false) {
-    ClearNativeTouchSequence(nullptr);
-  }
+  nsIWidget();
 
   /**
    * Create and initialize a widget.
@@ -2138,7 +2131,14 @@ class nsIWidget : public nsISupports {
     mMouseDownMayResize = aMouseDownMayResize;
   }
 
+  bool MaybeAddDraggingBrowser(mozilla::dom::BrowserParent* aBrowserParent);
+  void RemoveAllDraggingBrowsers();
+  using WeakBrowserArray = nsTArray<nsWeakPtr>;
+  WeakBrowserArray TakeDragSessionBrowsers();
+
  protected:
+  ~nsIWidget();
+
   // keep the list of children.  We also keep track of our siblings.
   // The ownership model is as follows: parent holds a strong ref to
   // the first element of the list, and each element holds a strong
@@ -2149,6 +2149,13 @@ class nsIWidget : public nsISupports {
   nsIWidget* MOZ_NON_OWNING_REF mLastChild;
   nsCOMPtr<nsIWidget> mNextSibling;
   nsIWidget* MOZ_NON_OWNING_REF mPrevSibling;
+
+  // PBrowsers for this widget that have a current drag session despite
+  // this process (the browser's parent process) not having generated
+  // a session yet.  When this process generates an nsIDragSession for
+  // this drag, this list is moved to that nsIDragSession object.
+  WeakBrowserArray mBrowsers;
+
   // When Destroy() is called, the sub class should set this true.
   bool mOnDestroyCalled;
   WindowType mWindowType;

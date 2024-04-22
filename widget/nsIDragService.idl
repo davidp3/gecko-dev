@@ -167,14 +167,6 @@ interface nsIDragService : nsISupports
   void endDragSession(in boolean aDoneDrag,
                       [optional] in unsigned long aKeyModifiers);
 
-  [notxpcom, nostdcall] boolean maybeAddBrowser(in BrowserParentPtr aBP);
-  [notxpcom, nostdcall] boolean removeAllBrowsers();
-
-  /**
-   * Retrun true if nsIDragSession's data is updated.
-   */
-  [notxpcom, nostdcall] boolean mustUpdateDataTransfer(in EventMessage aMessage);
-
   /**
    * The controller is used to issue events that would normally come from
    * the system (when it is not mocked for testing).  This allows us to test
