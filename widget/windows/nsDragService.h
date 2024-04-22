@@ -66,6 +66,9 @@ class nsDragService final : public nsDragSession {
   // A drop occurred within the application vs. outside of it.
   void SetDroppedLocal();
 
+  MOZ_CAN_RUN_SCRIPT NS_IMETHOD
+  EndAllDragSessions(bool aDoneDrag, uint32_t aKeyModifiers) override;
+
  protected:
   bool mSentLocalDropEvent = false;
 };

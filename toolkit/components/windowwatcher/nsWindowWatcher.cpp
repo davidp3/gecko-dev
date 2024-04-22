@@ -424,15 +424,19 @@ nsresult nsWindowWatcher::CreateChromeWindow(nsIWebBrowserChrome* aParentChrome,
     return NS_ERROR_UNEXPECTED;
   }
 
-  bool cancel = false;
+#ifdef XP_WIN
   if (aChromeFlags & nsIWebBrowserChrome::CHROME_OPENAS_DIALOG) {
-    // If there are any drag and drop operations in flight, try to end them.
+    // On Windows, if there are any drag and drop operations in flight,
+    // try to end them to avoid issues with dialogs.  See bug 1544167.
     nsCOMPtr<nsIDragService> ds =
         do_GetService("@mozilla.org/widget/dragservice;1");
     if (ds) {
-      ds->EndDragSession(true, 0);
+      ds->EndAllDragSessions(true, 0);
     }
   }
+#endif
+
+  bool cancel = false;
   nsCOMPtr<nsIWebBrowserChrome> newWindowChrome;
   nsresult rv = mWindowCreator->CreateChromeWindow(
       aParentChrome, aChromeFlags, aOpenWindowInfo, &cancel,

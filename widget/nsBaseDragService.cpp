@@ -690,6 +690,14 @@ nsBaseDragService::EndDragSession(bool aDoneDrag, uint32_t aKeyModifiers) {
   return NS_OK;
 }
 
+NS_IMETHODIMP
+nsBaseDragService::EndAllDragSessions(bool aDoneDrag, uint32_t aKeyModifiers) {
+  MOZ_ASSERT(false,
+             "nsIDragSession::EndAllDragSessions is not implemented "
+             "for this platform.");
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+
 void nsBaseDragSession::DiscardInternalTransferData() {
   if (mDataTransfer && mSourceNode) {
     MOZ_ASSERT(mDataTransfer);

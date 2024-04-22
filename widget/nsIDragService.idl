@@ -168,6 +168,20 @@ interface nsIDragService : nsISupports
                       [optional] in unsigned long aKeyModifiers);
 
   /**
+   * Terminate any running drag sessions.  This method is only available
+   * on Windows.
+   *
+   * @param aDoneDrag       If true, dragend will be sent for each canceled
+   *                        session.  Otherwise, the session is ended
+   *                        without it.
+   * @param aKeyModifiers   The modifier keys that are "pressed" during
+   *                        the dragend event.
+   */
+  [can_run_script]
+  void endAllDragSessions(in boolean aDoneDrag,
+                          [optional] in unsigned long aKeyModifiers);
+
+  /**
    * The controller is used to issue events that would normally come from
    * the system (when it is not mocked for testing).  This allows us to test
    * without engaging any native DND behavior.

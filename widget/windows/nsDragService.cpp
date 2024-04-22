@@ -630,6 +630,41 @@ nsDragService::EndDragSession(bool aDoneDrag, uint32_t aKeyModifiers) {
   return NS_OK;
 }
 
+// POD type passed to EnumWindowsEndDragSessionsProc
+struct EnumWindowsEdsParams {
+  nsDragService* mService;
+  const bool mDoneDrag;
+  const uint32_t mKeyModifiers;
+  nsresult mRv;
+};
+
+// Called for each top level window.  Note that we continue to end drag
+// sessions on each widget, regardless of the returned error code.
+static BOOL CALLBACK MOZ_CAN_RUN_SCRIPT
+EnumWindowsEndDragSessionsProc(HWND hwnd, LPARAM lParam) {
+  auto& params = *reinterpret_cast<EnumWindowsEdsParams*>(lParam);
+  nsWindow* win = WinUtils::GetNSWindowPtr(hwnd);
+  RefPtr<nsIDragSession> session = win ? win->GetDragSession() : nullptr;
+  if (!session) {
+    return TRUE;
+  }
+  RefPtr<nsDragService> service = params.mService;
+  nsresult rv = service->EndDragSession(params.mDoneDrag, params.mKeyModifiers);
+  if (NS_FAILED(rv)) {
+    params.mRv = rv;
+  }
+  return TRUE;
+}
+
+NS_IMETHODIMP
+nsDragService::EndAllDragSessions(bool aDoneDrag, uint32_t aKeyModifiers) {
+  MOZ_ASSERT(XRE_IsParentProcess());
+  EnumWindowsEdsParams params = {this, aDoneDrag, aKeyModifiers, NS_OK};
+  ::EnumWindows(EnumWindowsEndDragSessionsProc,
+                reinterpret_cast<LPARAM>(&params));
+  return params.mRv;
+}
+
 NS_IMETHODIMP
 nsDragSession::UpdateDragImage(nsINode* aImage, int32_t aImageX,
                                int32_t aImageY) {
