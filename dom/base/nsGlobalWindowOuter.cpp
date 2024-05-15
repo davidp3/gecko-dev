@@ -6207,10 +6207,11 @@ nsGlobalWindowOuter* nsGlobalWindowOuter::EnterModalState() {
   }
 
   // If there are any drag and drop operations in flight, try to end them.
-  nsCOMPtr<nsIDragService> ds =
-      do_GetService("@mozilla.org/widget/dragservice;1");
-  if (ds) {
-    ds->EndDragSession(true, 0);
+  RefPtr<nsIWidget> widget = topWin->GetMainWidget();
+  RefPtr<nsIDragSession> dragSession =
+      widget ? widget->GetDragSession() : nullptr;
+  if (dragSession) {
+    dragSession->EndDragSession(widget, true, 0);
   }
 
   // Clear the capturing content if it is under topDoc.

@@ -64,9 +64,7 @@ LazyLogModule sWidgetDragServiceLog("WidgetDragService");
 #define DRAGIMAGES_PREF "nglayout.enable_drag_images"
 
 nsBaseDragService::nsBaseDragService()
-    : mEndingSession(false),
-      mHasImage(false),
-      mContentPolicyType(nsIContentPolicy::TYPE_OTHER) {}
+    : mContentPolicyType(nsIContentPolicy::TYPE_OTHER) {}
 
 nsBaseDragService::~nsBaseDragService() = default;
 
@@ -384,7 +382,10 @@ nsresult nsBaseDragService::InvokeDragSession(
     // Set mDoingDrag so that EndDragSession cleans up and sends the dragend
     // event after the aborted drag.
     mDoingDrag = true;
-    EndDragSession(true, 0);
+    RefPtr<nsIDragSession> session = aWidget->GetDragSession();
+    if (session) {
+      session->EndDragSession(aWidget, true, 0);
+    }
   }
 
   return rv;
@@ -616,7 +617,30 @@ int32_t nsBaseDragSession::TakeChildProcessDragAction() {
 
 //-------------------------------------------------------------------------
 NS_IMETHODIMP
-nsBaseDragService::EndDragSession(bool aDoneDrag, uint32_t aKeyModifiers) {
+nsBaseDragSession::EndDragSession(nsISupports* aWidgetProvider, bool aDoneDrag,
+                                  uint32_t aKeyModifiers) {
+  nsCOMPtr<nsIWidget> widget = do_QueryObject(aWidgetProvider);
+  if (!widget) {
+    nsCOMPtr<mozIDOMWindow> window = do_GetInterface(aWidgetProvider);
+    if (NS_WARN_IF(!window)) {
+      return NS_ERROR_INVALID_ARG;
+    }
+    RefPtr<nsGlobalWindowInner> outerWin = nsGlobalWindowInner::Cast(window);
+    if (NS_WARN_IF(!outerWin)) {
+      return NS_ERROR_INVALID_ARG;
+    }
+    widget = outerWin->GetNearestWidget();
+    if (NS_WARN_IF(!widget)) {
+      return NS_ERROR_INVALID_ARG;
+    }
+  }
+
+  return EndDragSessionImpl(widget, aDoneDrag, aKeyModifiers);
+}
+
+nsresult nsBaseDragSession::EndDragSessionImpl(nsIWidget* aWidget,
+                                               bool aDoneDrag,
+                                               uint32_t aKeyModifiers) {
   if (!mDoingDrag || mEndingSession) {
     return NS_ERROR_FAILURE;
   }

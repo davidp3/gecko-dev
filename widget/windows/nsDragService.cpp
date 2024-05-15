@@ -310,8 +310,11 @@ nsresult nsDragService::StartInvokingDragSession(nsIWidget* aWidget,
   }
   SetDragEndPoint(LayoutDeviceIntPoint(cpos.x, cpos.y));
 
-  ModifierKeyState modifierKeyState;
-  EndDragSession(true, modifierKeyState.GetModifiers());
+  RefPtr<nsIDragSession> session = aWidget->GetDragSession();
+  if (session) {
+    ModifierKeyState modifierKeyState;
+    session->EndDragSession(aWidget, true, modifierKeyState.GetModifiers());
+  }
 
   mDoingDrag = false;
 
@@ -615,8 +618,8 @@ bool nsDragSession::IsCollectionObject(IDataObject* inDataObj) {
 // when the drag ends. It seems that OLE doesn't like to let apps quit
 // w/out crashing when we're still holding onto their data
 //
-NS_IMETHODIMP
-nsDragService::EndDragSession(bool aDoneDrag, uint32_t aKeyModifiers) {
+nsresult nsDragSession::EndDragSessionImpl(nsIWidget* aWidget, bool aDoneDrag,
+                                           uint32_t aKeyModifiers) {
   // Bug 100180: If we've got mouse events captured, make sure we release it -
   // that way, if we happen to call EndDragSession before diving into a nested
   // event loop, we can still respond to mouse events.
@@ -624,7 +627,7 @@ nsDragService::EndDragSession(bool aDoneDrag, uint32_t aKeyModifiers) {
     ::ReleaseCapture();
   }
 
-  nsBaseDragService::EndDragSession(aDoneDrag, aKeyModifiers);
+  nsBaseDragSession::EndDragSessionImpl(aWidget, aDoneDrag, aKeyModifiers);
   NS_IF_RELEASE(mDataObject);
 
   return NS_OK;
@@ -632,7 +635,6 @@ nsDragService::EndDragSession(bool aDoneDrag, uint32_t aKeyModifiers) {
 
 // POD type passed to EnumWindowsEndDragSessionsProc
 struct EnumWindowsEdsParams {
-  nsDragService* mService;
   const bool mDoneDrag;
   const uint32_t mKeyModifiers;
   nsresult mRv;
@@ -643,13 +645,13 @@ struct EnumWindowsEdsParams {
 static BOOL CALLBACK MOZ_CAN_RUN_SCRIPT
 EnumWindowsEndDragSessionsProc(HWND hwnd, LPARAM lParam) {
   auto& params = *reinterpret_cast<EnumWindowsEdsParams*>(lParam);
-  nsWindow* win = WinUtils::GetNSWindowPtr(hwnd);
+  RefPtr<nsWindow> win = WinUtils::GetNSWindowPtr(hwnd);
   RefPtr<nsIDragSession> session = win ? win->GetDragSession() : nullptr;
   if (!session) {
     return TRUE;
   }
-  RefPtr<nsDragService> service = params.mService;
-  nsresult rv = service->EndDragSession(params.mDoneDrag, params.mKeyModifiers);
+  nsresult rv =
+      session->EndDragSession(static_cast<nsIWidget*>(win), params.mDoneDrag, params.mKeyModifiers);
   if (NS_FAILED(rv)) {
     params.mRv = rv;
   }
@@ -659,7 +661,7 @@ EnumWindowsEndDragSessionsProc(HWND hwnd, LPARAM lParam) {
 NS_IMETHODIMP
 nsDragService::EndAllDragSessions(bool aDoneDrag, uint32_t aKeyModifiers) {
   MOZ_ASSERT(XRE_IsParentProcess());
-  EnumWindowsEdsParams params = {this, aDoneDrag, aKeyModifiers, NS_OK};
+  EnumWindowsEdsParams params = {aDoneDrag, aKeyModifiers, NS_OK};
   ::EnumWindows(EnumWindowsEndDragSessionsProc,
                 reinterpret_cast<LPARAM>(&params));
   return params.mRv;

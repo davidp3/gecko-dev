@@ -30,14 +30,31 @@ class MockDragService : public nsBaseDragService {
 
     // mDragAction is not yet handled properly in the MockDragService.
     // This should be updated with each drag event.  Instead, we always MOVE.
+    //
+    // We still need to end the drag session on the source widget.
+    // In normal (non-mock) Gecko operation, this happens regardless
+    // of whether the drop/cancel happened over one of our widgets.
+    // For instance, Windows does this in StartInvokingDragSession, after
+    // DoDragDrop returns, gtk does this on eDragTaskSourceEnd and cocoa
+    // does this in -[NSDraggingSource draggingSession: endedAt: operation:].
+    //
+    // Here, we know the source and target are Gecko windows (the test
+    // framework does not support dragging to/from other apps).  We could
+    // end the source drag session on drop and cancel, but sometimes we
+    // will want a dragleave to end the session (representing a drag cancel
+    // from Gecko) and other we times don't (like when dragging from one Gecko
+    // widget to another).  Therefore, we instead rely on the test to tell
+    // us when to end the source session by calling
+    // MockDragServiceController::EndSourceDragSession().
+    // Note that, like in non-mocked DND, we do this regardless of whether
+    // the source and target were the same widget -- in that case,
+    // EndDragSession is just called twice.
     mDragAction = DRAGDROP_ACTION_MOVE;
     StartDragSession(aWidget);
     return NS_OK;
   }
 
   bool IsMockService() override { return true; }
-
-  uint32_t mLastModifierKeyState = 0;
 };
 
 static void SetDragEndPointFromScreenPoint(
@@ -132,7 +149,6 @@ MockDragServiceController::SendEvent(
       LayoutDeviceIntPoint(aScreenX, aScreenY) - clientPosInScreenCoords;
 
   RefPtr<MockDragService> ds = mDragService;
-  ds->mLastModifierKeyState = aKeyModifiers;
 
   if (aEventType == EventType::eDragEnter) {
     // We expect StartDragSession to return an "error" when a drag session
@@ -166,7 +182,8 @@ MockDragServiceController::SendEvent(
             currentDragSession->GetSourceNode(getter_AddRefs(sourceNode));
         NS_ENSURE_SUCCESS(rv, rv);
         if (!sourceNode) {
-          rv = ds->EndDragSession(false /* doneDrag */, aKeyModifiers);
+          rv = currentDragSession->EndDragSession(widget, false /* doneDrag */,
+                                                  aKeyModifiers);
           NS_ENSURE_SUCCESS(rv, rv);
         }
       }
@@ -186,7 +203,8 @@ MockDragServiceController::SendEvent(
       widget->DispatchInputEvent(widgetEvent.get());
       SetDragEndPointFromScreenPoint(currentDragSession, presCxt,
                                      LayoutDeviceIntPoint(aScreenX, aScreenY));
-      nsresult rv = ds->EndDragSession(true /* doneDrag */, aKeyModifiers);
+      nsresult rv = currentDragSession->EndDragSession(
+          widget, true /* doneDrag */, aKeyModifiers);
       NS_ENSURE_SUCCESS(rv, rv);
     } break;
     default:
@@ -197,10 +215,38 @@ MockDragServiceController::SendEvent(
 }
 
 NS_IMETHODIMP
-MockDragServiceController::CancelDrag(uint32_t aKeyModifiers = 0) {
-  RefPtr<MockDragService> ds = mDragService;
-  ds->mLastModifierKeyState = aKeyModifiers;
-  return ds->EndDragSession(false /* doneDrag */, aKeyModifiers);
+MockDragServiceController::EndSourceDragSession(dom::BrowsingContext* aBC,
+                                                int32_t aScreenX,
+                                                int32_t aScreenY,
+                                                uint32_t aKeyModifiers = 0) {
+  RefPtr<nsIWidget> widget =
+      aBC->Canonical()->GetParentProcessWidgetContaining();
+  NS_ENSURE_TRUE(widget, NS_ERROR_UNEXPECTED);
+  nsCOMPtr<nsIDragSession> dragSession = widget->GetDragSession();
+  MOZ_ASSERT(dragSession);
+
+  // The drag session must have a source node if it is the drag session of the
+  // source widget.
+  nsCOMPtr<nsINode> sourceNode;
+  nsresult rv = dragSession->GetSourceNode(getter_AddRefs(sourceNode));
+  NS_ENSURE_SUCCESS(rv, rv);
+  MOZ_ASSERT(sourceNode);
+
+  return dragSession->EndDragSession(widget, true /* doneDrag */,
+                                     aKeyModifiers);
 }
 
+NS_IMETHODIMP
+MockDragServiceController::CancelDrag(dom::BrowsingContext* aBC,
+                                      uint32_t aKeyModifiers = 0) {
+  RefPtr<nsIWidget> widget =
+      aBC->Canonical()->GetParentProcessWidgetContaining();
+  NS_ENSURE_TRUE(widget, NS_ERROR_UNEXPECTED);
+
+  // This is redundant but reflects Windows nsDragService.
+  nsCOMPtr<nsIDragSession> currentDragSession = widget->GetDragSession();
+  MOZ_ASSERT(currentDragSession);
+  return currentDragSession->EndDragSession(widget, false /* doneDrag */,
+                                            aKeyModifiers);
+}
 }  // namespace mozilla::test

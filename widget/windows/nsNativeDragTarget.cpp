@@ -354,8 +354,9 @@ nsNativeDragTarget::DragLeave() {
       // we're done with it for now (until the user drags back into
       // mozilla).
       ModifierKeyState modifierKeyState;
-      nsCOMPtr<nsIDragService> dragService = mDragService;
-      dragService->EndDragSession(false, modifierKeyState.GetModifiers());
+      RefPtr<nsIWidget> widget = mWidget;
+      currentDragSession->EndDragSession(widget, false,
+                                         modifierKeyState.GetModifiers());
     }
   }
 
@@ -377,8 +378,11 @@ void nsNativeDragTarget::DragCancel() {
     }
     if (mDragService) {
       ModifierKeyState modifierKeyState;
-      nsCOMPtr<nsIDragService> dragService = mDragService;
-      dragService->EndDragSession(false, modifierKeyState.GetModifiers());
+      nsCOMPtr<nsIDragSession> session = mWidget->GetDragSession();
+      if (session) {
+        RefPtr<nsIWidget> widget = mWidget;
+        session->EndDragSession(widget, false, modifierKeyState.GetModifiers());
+      }
     }
     this->Release();  // matching the AddRef in DragEnter
     mTookOwnRef = false;
@@ -410,7 +414,6 @@ nsNativeDragTarget::Drop(LPDATAOBJECT pData, DWORD grfKeyState, POINTL aPT,
   // NOTE: ProcessDrag spins the event loop which may destroy arbitrary objects.
   // We use strong refs to prevent it from destroying these:
   RefPtr<nsNativeDragTarget> kungFuDeathGrip = this;
-  nsCOMPtr<nsIDragService> serv = mDragService;
 
   // Now process the native drag state and then dispatch the event
   ProcessDrag(eDrop, grfKeyState, aPT, pdwEffect);
@@ -436,7 +439,9 @@ nsNativeDragTarget::Drop(LPDATAOBJECT pData, DWORD grfKeyState, POINTL aPT,
   cpos.y = GET_Y_LPARAM(pos);
   currentDragSession->SetDragEndPoint(cpos.x, cpos.y);
   ModifierKeyState modifierKeyState;
-  serv->EndDragSession(true, modifierKeyState.GetModifiers());
+  RefPtr<nsIWidget> widget = mWidget;
+  currentDragSession->EndDragSession(widget, true,
+                                     modifierKeyState.GetModifiers());
 
   // release the ref that was taken in DragEnter
   NS_ASSERTION(mTookOwnRef, "want to release own ref, but not taken!");

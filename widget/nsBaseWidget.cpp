@@ -2523,12 +2523,10 @@ nsIDragSession* nsIWidget::GetDragSession() {
 }
 
 void nsIWidget::SuppressDragging() {
-  nsCOMPtr<nsIDragService> dragService =
-      do_GetService("@mozilla.org/widget/dragservice;1");
-  if (!dragService) {
-    return;
+  RefPtr<nsIDragSession> session = GetDragSession();
+  if (session) {
+    session->EndDragSession(this, false, 0);
   }
-  dragService->EndDragSession(false, 0);
   ++mDragSuppressLevel;
 }
 

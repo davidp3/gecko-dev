@@ -60,9 +60,22 @@ interface nsIMockDragServiceController : nsISupports
                  [optional] in uint32_t aKeyModifiers);
 
   /**
-   * Windows' IDropTarget has the ability to "Cancel" a drag that is
-   * different than dragleave.  This emulates that behavior for testing.
+   * Issue dragend to the drag session on the source widget, in the case
+   * where the source and target widgets are different.  This mirrors
+   * the real behavior, where the mechanisms for ending the session on
+   * the target are different than on the source.  See
+   * MockDragSession::InvokeDragSessionImpl for details.
    */
   [can_run_script]
-  void cancelDrag([optional] in uint32_t aKeyModifiers);
+  void endSourceDragSession(in BrowsingContext aBC,
+                            in long aScreenX, in long aScreenY,
+                            [optional] in uint32_t aKeyModifiers);
+
+	/**
+	 * Windows' IDropTarget has the ability to "Cancel" a drag that is
+	 * different than dragleave.  This emulates that behavior for testing.
+	 */
+	[can_run_script]
+  void cancelDrag(in BrowsingContext aBC,
+                  [optional] in uint32_t aKeyModifiers);
 };

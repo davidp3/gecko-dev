@@ -1983,7 +1983,7 @@ mozilla::ipc::IPCResult BrowserChild::RecvEndDragSession(
   nsCOMPtr<nsIDragService> dragService =
       do_GetService("@mozilla.org/widget/dragservice;1");
   if (dragService) {
-    nsIDragSession* dragSession = WebWidget()->GetDragSession();
+    RefPtr<nsIDragSession> dragSession = WebWidget()->GetDragSession();
     if (dragSession) {
       if (aUserCancelled) {
         dragSession->UserCancelled();
@@ -1995,7 +1995,8 @@ mozilla::ipc::IPCResult BrowserChild::RecvEndDragSession(
       }
       dragSession->SetDragEndPoint(aDragEndPoint.x, aDragEndPoint.y);
     }
-    dragService->EndDragSession(aDoneDrag, aKeyModifiers);
+    RefPtr<nsIWidget> widget = WebWidget();
+    dragSession->EndDragSession(widget, aDoneDrag, aKeyModifiers);
   }
   return IPC_OK();
 }

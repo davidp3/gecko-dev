@@ -4130,9 +4130,10 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
         nsCOMPtr<nsINode> sourceNode;
         dragSession->GetSourceNode(getter_AddRefs(sourceNode));
         if (!sourceNode) {
-          nsCOMPtr<nsIDragService> dragService = mDragService;
-          dragService->EndDragSession(
-              false, nsCocoaUtils::ModifiersForEvent([NSApp currentEvent]));
+          RefPtr<nsIWidget> widget = mGeckoChild;
+          dragSession->EndDragSession(
+              widget, false,
+              nsCocoaUtils::ModifiersForEvent([NSApp currentEvent]));
         }
         return NSDragOperationNone;
       }
@@ -4192,9 +4193,10 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
           // initiated in a different app. End the drag session,
           // since we're done with it for now (until the user
           // drags back into mozilla).
-          nsCOMPtr<nsIDragService> dragService = mDragService;
-          dragService->EndDragSession(
-              false, nsCocoaUtils::ModifiersForEvent([NSApp currentEvent]));
+          RefPtr<nsIWidget> widget = mGeckoChild;
+          dragSession->EndDragSession(
+              widget, false,
+              nsCocoaUtils::ModifiersForEvent([NSApp currentEvent]));
         }
         break;
       }
@@ -4287,10 +4289,6 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
   nsCOMPtr<nsIDragSession> session =
       mGeckoChild ? mGeckoChild->GetDragSession() : nullptr;
   if (session) {
-    RefPtr<nsDragService> dragService =
-        static_cast<nsDragService*>(mDragService);
-    MOZ_ASSERT(dragService);
-
     // Set the dragend point from the current mouse location
     // FIXME(emilio): Weird that we wouldn't use aPoint instead? Seems to work
     // locally as well...
@@ -4316,8 +4314,9 @@ static gfx::IntPoint GetIntegerDeltaForEvent(NSEvent* aEvent) {
       }
     }
 
-    dragService->EndDragSession(true,
-                                nsCocoaUtils::ModifiersForEvent(currentEvent));
+    RefPtr<nsIWidget> widget = mGeckoChild;
+    session->EndDragSession(widget, true,
+                            nsCocoaUtils::ModifiersForEvent(currentEvent));
   }
 
   session = nullptr;
