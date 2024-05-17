@@ -2508,18 +2508,15 @@ already_AddRefed<nsIBidiKeyboard> nsIWidget::CreateBidiKeyboardInner() {
 #endif
 
 nsIDragSession* nsIWidget::GetDragSession() {
-  // Temporary implementation that delegates to the singleton.  This
-  // will be replaced by the end of the patch series.
-  nsCOMPtr<nsIDragService> dragService =
-      do_GetService("@mozilla.org/widget/dragservice;1");
-  // TODO: This is still a hack to get at the singleton when there is an
-  // active session.  This will be changed in a later patch.
-  nsCOMPtr<nsIDragSession> dragSession;
-  if (mDragSuppressLevel == 0 &&
-      static_cast<nsBaseDragService*>(dragService.get())->IsDragging()) {
-    dragSession = do_QueryInterface(dragService);
+  if (mDragSuppressLevel == 0) {
+    return mDragSession;
   }
-  return dragSession;
+  return nullptr;
+}
+
+void nsIWidget::SetDragSession(nsIDragSession* aSession) {
+  MOZ_ASSERT(!mDragSession || !aSession);
+  mDragSession = aSession;
 }
 
 void nsIWidget::SuppressDragging() {

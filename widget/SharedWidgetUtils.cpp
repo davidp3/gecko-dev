@@ -6,6 +6,7 @@
 
 #include "WidgetUtils.h"
 
+#include "mozilla/dom/Document.h"
 #include "mozilla/TextEvents.h"
 
 #include "nsIBaseWindow.h"
@@ -24,33 +25,41 @@ void WidgetUtils::Shutdown() {
 }
 
 // static
-already_AddRefed<nsIWidget> WidgetUtils::DOMWindowToWidget(
-    nsPIDOMWindowOuter* aDOMWindow) {
+already_AddRefed<nsIWidget> WidgetUtils::BaseWindowToWidget(
+    nsIBaseWindow* aWindow) {
+  nsCOMPtr<nsIBaseWindow> window = aWindow;
   nsCOMPtr<nsIWidget> widget;
-  nsCOMPtr<nsPIDOMWindowOuter> window = aDOMWindow;
-
-  if (window) {
-    nsCOMPtr<nsIBaseWindow> baseWin(do_QueryInterface(window->GetDocShell()));
-
-    while (!widget && baseWin) {
-      baseWin->GetParentWidget(getter_AddRefs(widget));
-      if (!widget) {
-        nsCOMPtr<nsIDocShellTreeItem> docShellAsItem(
-            do_QueryInterface(baseWin));
-        if (!docShellAsItem) return nullptr;
-
-        nsCOMPtr<nsIDocShellTreeItem> parent;
-        docShellAsItem->GetInProcessParent(getter_AddRefs(parent));
-
-        window = do_GetInterface(parent);
-        if (!window) return nullptr;
-
-        baseWin = do_QueryInterface(window->GetDocShell());
-      }
+  while (window) {
+    window->GetParentWidget(getter_AddRefs(widget));
+    if (widget) {
+      break;
     }
+
+    nsCOMPtr<nsIDocShellTreeItem> docShellAsItem(do_QueryInterface(window));
+    if (!docShellAsItem) {
+      return nullptr;
+    }
+
+    nsCOMPtr<nsIDocShellTreeItem> parent;
+    docShellAsItem->GetInProcessParent(getter_AddRefs(parent));
+    window = do_GetInterface(parent);
   }
 
   return widget.forget();
+}
+
+// static
+already_AddRefed<nsIWidget> WidgetUtils::DocumentToWidget(
+    mozilla::dom::Document* aDocument) {
+  nsCOMPtr<nsIBaseWindow> window = do_QueryInterface(aDocument->GetDocShell());
+  return BaseWindowToWidget(window);
+}
+
+// static
+already_AddRefed<nsIWidget> WidgetUtils::DOMWindowToWidget(
+    nsPIDOMWindowOuter* aDOMWindow) {
+  nsCOMPtr<nsIBaseWindow> window = do_QueryInterface(aDOMWindow->GetDocShell());
+  return BaseWindowToWidget(window);
 }
 
 // static

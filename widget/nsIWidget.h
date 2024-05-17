@@ -2115,6 +2115,12 @@ class nsIWidget : public nsISupports {
   nsIDragSession* GetDragSession();
 
   /**
+   * Set the current drag session for this widget.  If aSession is non-null
+   * then there must not already be a session set on this widget.
+   */
+  void SetDragSession(nsIDragSession* aSession);
+
+  /**
    * Increase/decrease dragging suppress level by one.
    * If level is greater than one, dragging from/to this widget is disabled.
    * Note that we separate functions for suppressing/unsuppressing to
@@ -2149,6 +2155,9 @@ class nsIWidget : public nsISupports {
   nsIWidget* MOZ_NON_OWNING_REF mLastChild;
   nsCOMPtr<nsIWidget> mNextSibling;
   nsIWidget* MOZ_NON_OWNING_REF mPrevSibling;
+
+  // Drag session happening on this widget, if any.
+  RefPtr<nsIDragSession> mDragSession;
 
   // PBrowsers for this widget that have a current drag session despite
   // this process (the browser's parent process) not having generated

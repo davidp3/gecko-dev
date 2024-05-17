@@ -182,6 +182,20 @@ interface nsIDragService : nsISupports
   nsIMockDragServiceController getMockDragController();
 
   /**
+   * True if this is a mock nsIDragService, created with
+   * createMockDragController().
+   */
+  [noscript] readonly attribute boolean isMockService;
+
+%{ C++
+  bool IsMockService() {
+    bool ret = false;
+    MOZ_ALWAYS_SUCCEEDS(GetIsMockService(&ret));
+    return ret;
+  }
+%}
+
+  /**
    * If this is true, mSessionIsSynthesizedForTests should not become true.
    * This hack is used to bypass the "old" drag-drop test behavior, which needed
    * special behavior to pass.  The new framework requires the actual browser

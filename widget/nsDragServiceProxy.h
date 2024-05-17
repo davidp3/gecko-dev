@@ -8,25 +8,24 @@
 
 #include "nsBaseDragService.h"
 
-// Temporary inheritance from nsBaseDragService instead of nsBaseDragSession
-// (which nsBaseDragService temporarily inherits).
-// This will be undone at the end of this patch series.
-class nsDragSessionProxy : public nsBaseDragService {};
-
-// Temporary inheritance from nsDragSessionProxy instead of nsBaseDragService
-// (which nsDragSession temporarily inherits).
-// This will be undone at the end of this patch series.
-class nsDragServiceProxy final : public nsDragSessionProxy {
+class nsDragSessionProxy : public nsBaseDragSession {
  public:
-  nsDragServiceProxy();
+  NS_INLINE_DECL_REFCOUNTING_INHERITED(nsDragSessionProxy, nsBaseDragSession)
 
-  NS_INLINE_DECL_REFCOUNTING_INHERITED(nsDragServiceProxy, nsDragSessionProxy)
-
-  // nsBaseDragService
   virtual nsresult InvokeDragSessionImpl(
       nsIWidget* aWidget, nsIArray* anArrayTransferables,
       const mozilla::Maybe<mozilla::CSSIntRegion>& aRegion,
       uint32_t aActionType) override;
+
+ private:
+  ~nsDragSessionProxy();
+};
+
+class nsDragServiceProxy : public nsBaseDragService {
+ public:
+  NS_INLINE_DECL_REFCOUNTING_INHERITED(nsDragServiceProxy, nsBaseDragService)
+
+  already_AddRefed<nsIDragSession> CreateDragSession() override;
 
  private:
   virtual ~nsDragServiceProxy();

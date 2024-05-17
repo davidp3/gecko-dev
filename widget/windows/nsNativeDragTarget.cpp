@@ -16,6 +16,7 @@
 #include "nsClipboard.h"
 #include "KeyboardLayout.h"
 
+#include "mozilla/dom/MouseEventBinding.h"
 #include "mozilla/MouseEvents.h"
 
 using namespace mozilla;
@@ -152,8 +153,13 @@ void nsNativeDragTarget::DispatchDragDropEvent(EventMessage aEventMessage,
   ModifierKeyState modifierKeyState;
   modifierKeyState.InitInputEvent(event);
 
-  event.mInputSource =
-      static_cast<nsBaseDragService*>(mDragService.get())->GetInputSource();
+  nsDragSession* currSession =
+      static_cast<nsDragSession*>(mWidget->GetDragSession());
+  if (currSession) {
+    event.mInputSource = currSession->GetInputSource();
+  } else {
+    event.mInputSource = dom::MouseEvent_Binding::MOZ_SOURCE_MOUSE;
+  }
 
   mWidget->DispatchInputEvent(&event);
 }
@@ -166,7 +172,8 @@ void nsNativeDragTarget::ProcessDrag(EventMessage aEventMessage,
   GetGeckoDragAction(grfKeyState, pdwEffect, &geckoAction);
 
   // Set the current action into the Gecko specific type
-  nsCOMPtr<nsIDragSession> currSession = mWidget->GetDragSession();
+  nsDragSession* currSession =
+      static_cast<nsDragSession*>(mWidget->GetDragSession());
   if (!currSession) {
     return;
   }
@@ -180,10 +187,9 @@ void nsNativeDragTarget::ProcessDrag(EventMessage aEventMessage,
   // DRAGDROP_ACTION_UNINITIALIZED, it means that the last event was sent
   // to the child process and this event is also being sent to the child
   // process. In this case, use the last event's action instead.
-  nsDragService* dragService = static_cast<nsDragService*>(mDragService.get());
   currSession->GetDragAction(&geckoAction);
 
-  int32_t childDragAction = dragService->TakeChildProcessDragAction();
+  int32_t childDragAction = currSession->TakeChildProcessDragAction();
   if (childDragAction != nsIDragService::DRAGDROP_ACTION_UNINITIALIZED) {
     geckoAction = childDragAction;
   }
@@ -258,7 +264,7 @@ nsNativeDragTarget::DragEnter(LPDATAOBJECT pIDataSource, DWORD grfKeyState,
     mEffectsPreferred = DROPEFFECT_NONE;
   }
 
-  // Set the native data object into drag service
+  // Set the native data object into drag session
   RefPtr<nsDragSession> session =
       static_cast<nsDragSession*>(mWidget->GetDragSession());
   MOZ_ASSERT(session);
@@ -408,7 +414,9 @@ nsNativeDragTarget::Drop(LPDATAOBJECT pData, DWORD grfKeyState, POINTL aPT,
   // Set the native data object into the drag service
   RefPtr<nsDragSession> currentDragSession =
       static_cast<nsDragSession*>(mWidget->GetDragSession());
-  MOZ_ASSERT(currentDragSession);
+  if (!currentDragSession) {
+    return S_OK;
+  }
   currentDragSession->SetIDataObject(pData);
 
   // NOTE: ProcessDrag spins the event loop which may destroy arbitrary objects.
@@ -423,14 +431,12 @@ nsNativeDragTarget::Drop(LPDATAOBJECT pData, DWORD grfKeyState, POINTL aPT,
     return S_OK;  // DragCancel() was called.
   }
 
-  // Let the win drag service know whether this session experienced
+  // Let the win drag session know whether it experienced
   // a drop event within the application. Drop will not oocur if the
   // drop landed outside the app. (used in tab tear off, bug 455884)
-  RefPtr<nsDragService> winDragService =
-      static_cast<nsDragService*>(mDragService.get());
-  winDragService->SetDroppedLocal();
+  currentDragSession->SetDroppedLocal();
 
-  // tell the drag service we're done with the session
+  // Tell the drag session we're done with it.
   // Use GetMessagePos to get the position of the mouse at the last message
   // seen by the event loop. (Bug 489729)
   DWORD pos = ::GetMessagePos();

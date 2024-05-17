@@ -10,12 +10,18 @@
 
 #include "mozilla/AlreadyAddRefed.h"
 #include "mozilla/gfx/Matrix.h"
+#include "nsIDocShell.h"
 #include "nsRect.h"
 
+class nsIBaseWindow;
 class nsIWidget;
 class nsPIDOMWindowOuter;
 
 namespace mozilla {
+
+namespace dom {
+class Document;
+}
 
 // NB: these must match up with pseudo-enum in nsIScreen.idl.
 enum ScreenRotation {
@@ -46,6 +52,19 @@ class WidgetUtils {
    * widget.
    */
   static void Shutdown();
+
+  /**
+   * Starting at the docshell item for the given window, this looks up
+   * the docshell tree until it finds a docshell item that has a widget.
+   */
+  static already_AddRefed<nsIWidget> BaseWindowToWidget(nsIBaseWindow* aWindow);
+
+  /**
+   * Starting at the docshell item for the given document, this looks up
+   * the docshell tree until it finds a docshell item that has a widget.
+   */
+  static already_AddRefed<nsIWidget> DocumentToWidget(
+      mozilla::dom::Document* aDocument);
 
   /**
    * Starting at the docshell item for the passed in DOM window this looks up

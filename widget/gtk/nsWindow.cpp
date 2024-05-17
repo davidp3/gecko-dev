@@ -589,10 +589,10 @@ void nsWindow::Destroy() {
   UnlockNativePointer();
 #endif
 
-  // dragService will be null after shutdown of the service manager.
-  RefPtr<nsDragService> dragService = nsDragService::GetInstance();
-  if (dragService && this == dragService->GetMostRecentDestWindow()) {
-    dragService->ScheduleLeaveEvent();
+  // Cancel (dragleave) the current drag session, if any.
+  nsDragSession* dragSession = static_cast<nsDragSession*>(GetDragSession());
+  if (dragSession && this == dragSession->GetMostRecentDestWindow()) {
+    dragSession->ScheduleLeaveEvent();
   }
 
   nsIRollupListener* rollupListener = nsBaseWidget::GetActiveRollupListener();
@@ -5485,9 +5485,9 @@ void nsWindow::OnDragDataReceivedEvent(GtkWidget* aWidget,
                                        gpointer aData) {
   LOGDRAG("nsWindow::OnDragDataReceived");
 
-  RefPtr<nsDragService> dragService = nsDragService::GetInstance();
-  nsDragService::AutoEventLoop loop(dragService);
-  dragService->TargetDataReceived(aWidget, aDragContext, aX, aY, aSelectionData,
+  nsDragSession* dragSession = static_cast<nsDragSession*>(GetDragSession());
+  nsDragSession::AutoEventLoop loop(dragSession);
+  dragSession->TargetDataReceived(aWidget, aDragContext, aX, aY, aSelectionData,
                                   aInfo, aTime);
 }
 
@@ -8716,9 +8716,22 @@ gboolean WindowDragMotionHandler(GtkWidget* aWidget,
 
   LOGDRAG("WindowDragMotionHandler target nsWindow [%p]", window.get());
 
-  RefPtr<nsDragService> dragService = nsDragService::GetInstance();
-  nsDragService::AutoEventLoop loop(dragService);
-  if (!dragService->ScheduleMotionEvent(
+  nsDragSession* dragSession =
+      static_cast<nsDragSession*>(window->GetDragSession());
+  if (!dragSession) {
+    // This is the entering of an external drag session.
+    nsCOMPtr<nsIDragService> dragService =
+        do_GetService("@mozilla.org/widget/dragservice;1");
+    // Callback may run during shutdown so check for destroyed drag service.
+    if (dragService) {
+      dragService->StartDragSession(window);
+    }
+    dragSession = static_cast<nsDragSession*>(window->GetDragSession());
+    NS_ENSURE_TRUE(dragSession, FALSE);
+  }
+
+  nsDragSession::AutoEventLoop loop(dragSession);
+  if (!dragSession->ScheduleMotionEvent(
           window, aDragContext, GetWindowDropPosition(window, aX, aY), aTime)) {
     return FALSE;
   }
@@ -8740,10 +8753,20 @@ void WindowDragLeaveHandler(GtkWidget* aWidget) {
     return;
   }
 
-  RefPtr<nsDragService> dragService = nsDragService::GetInstance();
-  nsDragService::AutoEventLoop loop(dragService);
+  // If this dragleave is being handled after the drop due to asynchronicity
+  // caused by nsDragSession::Schedule, then the drag session will have
+  // already been ended.  nsDragSession::Schedule has safe-guards that
+  // preempt the dragleave in this case but they should never trigger.
+  nsDragSession* dragSession =
+      static_cast<nsDragSession*>(window->GetDragSession());
+  if (!dragSession) {
+    LOGDRAG("    Received dragleave after drag had ended.\n");
+    return;
+  }
 
-  nsWindow* mostRecentDragWindow = dragService->GetMostRecentDestWindow();
+  nsDragSession::AutoEventLoop loop(dragSession);
+
+  nsWindow* mostRecentDragWindow = dragSession->GetMostRecentDestWindow();
   if (!mostRecentDragWindow) {
     // This can happen when the target will not accept a drop.  A GTK drag
     // source sends the leave message to the destination before the
@@ -8763,7 +8786,7 @@ void WindowDragLeaveHandler(GtkWidget* aWidget) {
   }
 
   LOGDRAG("WindowDragLeaveHandler nsWindow %p\n", (void*)mostRecentDragWindow);
-  dragService->ScheduleLeaveEvent();
+  dragSession->ScheduleLeaveEvent();
 }
 
 static void drag_leave_event_cb(GtkWidget* aWidget,
@@ -8790,9 +8813,10 @@ gboolean WindowDragDropHandler(GtkWidget* aWidget, GdkDragContext* aDragContext,
   }
 
   LOGDRAG("WindowDragDropHandler nsWindow [%p]", window.get());
-  RefPtr<nsDragService> dragService = nsDragService::GetInstance();
-  nsDragService::AutoEventLoop loop(dragService);
-  return dragService->ScheduleDropEvent(
+  nsDragSession* dragSession =
+      static_cast<nsDragSession*>(window->GetDragSession());
+  nsDragSession::AutoEventLoop loop(dragSession);
+  return dragSession->ScheduleDropEvent(
       window, aDragContext, GetWindowDropPosition(window, aX, aY), aTime);
 }
 

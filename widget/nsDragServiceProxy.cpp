@@ -24,11 +24,16 @@ using mozilla::gfx::SourceSurface;
 using mozilla::gfx::SurfaceFormat;
 using mozilla::ipc::Shmem;
 
-nsDragServiceProxy::nsDragServiceProxy() = default;
-
 nsDragServiceProxy::~nsDragServiceProxy() = default;
 
-nsresult nsDragServiceProxy::InvokeDragSessionImpl(
+nsDragSessionProxy::~nsDragSessionProxy() = default;
+
+already_AddRefed<nsIDragSession> nsDragServiceProxy::CreateDragSession() {
+  RefPtr<nsIDragSession> session = new nsDragSessionProxy();
+  return session.forget();
+}
+
+nsresult nsDragSessionProxy::InvokeDragSessionImpl(
     nsIWidget* aWidget, nsIArray* aArrayTransferables,
     const Maybe<CSSIntRegion>& aRegion, uint32_t aActionType) {
   NS_ENSURE_STATE(mSourceDocument->GetDocShell());
@@ -81,7 +86,6 @@ nsresult nsDragServiceProxy::InvokeDragSessionImpl(
             std::move(transferables), aActionType, std::move(surfaceData),
             stride, dataSurface->GetFormat(), dragRect, principal, csp, csArgs,
             mSourceWindowContext, mSourceTopWindowContext);
-        StartDragSession(aWidget);
         return NS_OK;
       }
     }
@@ -91,6 +95,5 @@ nsresult nsDragServiceProxy::InvokeDragSessionImpl(
       std::move(transferables), aActionType, Nothing(), 0,
       static_cast<SurfaceFormat>(0), dragRect, principal, csp, csArgs,
       mSourceWindowContext, mSourceTopWindowContext);
-  StartDragSession(aWidget);
   return NS_OK;
 }

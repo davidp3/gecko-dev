@@ -2666,15 +2666,11 @@ void nsWindow::OnDragEvent(int32_t aAction, int64_t aTime, float aX, float aY,
                            jni::Object::Param aDropData) {
   MOZ_ASSERT(NS_IsMainThread());
 
-  RefPtr<nsDragService> dragService = nsDragService::GetInstance();
-  if (!dragService) {
-    return;
-  }
-
   LayoutDeviceIntPoint point =
       LayoutDeviceIntPoint(int32_t(floorf(aX)), int32_t(floorf(aY)));
 
-  nsCOMPtr<nsIDragSession> dragSession = GetDragSession();
+  RefPtr<nsDragSession> dragSession =
+      static_cast<nsDragSession*>(GetDragSession());
   if (dragSession && aAction == java::sdk::DragEvent::ACTION_DRAG_STARTED) {
     dragSession->SetDragEndPoint(point.x, point.y);
     return;
@@ -2688,12 +2684,20 @@ void nsWindow::OnDragEvent(int32_t aAction, int64_t aTime, float aX, float aY,
   EventMessage message = convertDragEventActionToGeckoEvent(aAction);
 
   if (message == eDragEnter) {
-    dragService->StartDragSession(this);
+    MOZ_ASSERT(!dragSession);
+    nsCOMPtr<nsIDragService> dragService =
+        do_GetService("@mozilla.org/widget/dragservice;1");
+    if (dragService) {
+      dragService->StartDragSession(this);
+    }
+
     // For compatibility, we have to set temporary data.
+    dragSession = static_cast<nsDragSession*>(GetDragSession());
+    MOZ_ASSERT(dragSession);
+
     auto dropData =
         mozilla::java::GeckoDragAndDrop::DropData::Ref::From(aDropData);
-    nsDragService::SetDropData(dropData);
-    dragSession = GetDragSession();
+    dragSession->SetDropData(dropData);
   }
 
   if (dragSession) {
@@ -2715,7 +2719,7 @@ void nsWindow::OnDragEvent(int32_t aAction, int64_t aTime, float aX, float aY,
         }
         auto dropData =
             mozilla::java::GeckoDragAndDrop::DropData::Ref::From(aDropData);
-        nsDragService::SetDropData(dropData);
+        dragSession->SetDropData(dropData);
         dragSession->SetDragEndPoint(point.x, point.y);
         break;
       }
