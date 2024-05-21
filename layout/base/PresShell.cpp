@@ -213,6 +213,8 @@
 #  endif
 #endif
 
+#include "ContentAnalysis.h"
+
 // define the scalfactor of drag and drop images
 // relative to the max screen height/width
 #define RELATIVE_SCALEFACTOR 0.0925f
@@ -7229,6 +7231,15 @@ nsresult PresShell::EventHandler::HandleEventUsingCoordinates(
   }
   // Note that even if ComputeElementFromFrame() returns true,
   // eventTargetData.mContent can be nullptr here.
+
+  // ContentAnalysis may want to check the drop event before it is sent
+  // to the DOM.  If so, it will stopPropagation and preventDefault on
+  // the event and send a suitable replacement (another drop or a dragleave)
+  // in due course.
+  if (aGUIEvent->mClass == eDragEventClass && aGUIEvent->mMessage == eDrop) {
+    mozilla::contentanalysis::ContentAnalysis::ConsiderDropEvent(
+        mPresShell, aGUIEvent->AsDragEvent(), eventTargetData.GetFrame());
+  }
 
   // Dispatch a pointer event if Pointer Events is enabled.  Note that if
   // pointer event listeners change the layout, eventTargetData is

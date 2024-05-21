@@ -20,6 +20,7 @@
 #include <atomic>
 #include <regex>
 #include <string>
+#include <map>
 
 #ifdef XP_WIN
 #  include <windows.h>
@@ -86,6 +87,10 @@ class ContentAnalysisRequest final : public nsIContentAnalysisRequest {
                          dom::WindowGlobalParent* aWindowGlobalParent);
   static nsresult GetFileDigest(const nsAString& aFilePath,
                                 nsCString& aDigestString);
+  void SetUrl(nsIURI* aUrl);
+  dom::WindowGlobalParent* GetWindowGlobalParent() {
+    return mWindowGlobalParent;
+  }
 
  private:
   ~ContentAnalysisRequest();
@@ -139,6 +144,8 @@ class ContentAnalysisRequest final : public nsIContentAnalysisRequest {
 
   friend class ::ContentAnalysisTest;
 };
+
+using ContentAnalysisRequestList = nsTArray<RefPtr<ContentAnalysisRequest>>;
 
 #define CONTENTANALYSIS_IID                          \
   {                                                  \
@@ -221,6 +228,25 @@ class ContentAnalysis final : public nsIContentAnalysis {
       nsITransferable* aTransferable, int32_t aClipboardType,
       SafeContentAnalysisResultCallback* aResolver);
 
+  // Check whether CA is on and the drop event hasn't undergone content
+  // analysis.
+  // In that case, this will send the event to CA, which will submit a new
+  // event, based on the CA verdict (unless it was an internal error,
+  // in which case none of that happens).
+  static nsresult ConsiderDropEvent(PresShell* aPresShell,
+                                    WidgetDragEvent* aEvent, nsIFrame* aFrame);
+  // Makes the DND requests (minus the URL) and stores them for later analysis.
+  static nsresult PrepareForDropEventAnalysisRequest(
+      dom::DataTransfer* aDataTransfer,
+      dom::WindowGlobalParent* aWindowGlobalParent);
+
+  // aDlpRequestMadeWasPreviouslySent is used by DND when the
+  // dlp-request-made observable was already sent.
+  nsresult AnalyzeContentRequestCallback(nsIContentAnalysisRequest* aRequest,
+                                         bool aAutoAcknowledge,
+                                         nsIContentAnalysisCallback* aCallback,
+                                         bool aDlpRequestMadeWasPreviouslySent);
+
  private:
   ~ContentAnalysis();
   // Remove unneeded copy constructor/assignment
@@ -231,7 +257,8 @@ class ContentAnalysis final : public nsIContentAnalysis {
                                        bool aIsPerUser);
   nsresult AnalyzeContentRequestCallbackPrivate(
       nsIContentAnalysisRequest* aRequest, bool aAutoAcknowledge,
-      nsIContentAnalysisCallback* aCallback);
+      nsIContentAnalysisCallback* aCallback,
+      bool aDlpRequestMadeWasPreviouslySent = false);
 
   nsresult RunAnalyzeRequestTask(
       const RefPtr<nsIContentAnalysisRequest>& aRequest, bool aAutoAcknowledge,
@@ -255,6 +282,20 @@ class ContentAnalysis final : public nsIContentAnalysis {
 
   UrlFilterResult FilterByUrlLists(nsIContentAnalysisRequest* aRequest);
   void EnsureParsedUrlFilters();
+
+  // Adds CA requests from a drop with the given DataTransfer to aRequestList.
+  // This does not send them to CA.  They are missing the URL, which comes
+  // later.
+  nsresult MakeDropRequests(dom::DataTransfer* aDataTransfer,
+                            dom::WindowGlobalParent* aWindowGlobalParent,
+                            ContentAnalysisRequestList* aRequestList);
+  static already_AddRefed<nsIContentAnalysisCallback> MakeDropRequestCallback(
+      uint64_t aBrowsingContextId, bool aIsRemote);
+  MOZ_CAN_RUN_SCRIPT void SendDragleaveAndCancelRemaining(uint64_t bcId,
+                                                          bool aIsRemote);
+  MOZ_CAN_RUN_SCRIPT void SendApprovedDrop(uint64_t bcId, bool aIsRemote);
+  void SetResponseWaitCount(uint64_t aBrowsingContextId, size_t aNumToWait);
+  size_t DecrementResponseWaitCount(uint64_t aBrowsingContextId);
 
   using ClientPromise =
       MozPromise<std::shared_ptr<content_analysis::sdk::Client>, nsresult,
@@ -303,6 +344,13 @@ class ContentAnalysis final : public nsIContentAnalysis {
 
   std::vector<std::regex> mAllowUrlList;
   std::vector<std::regex> mDenyUrlList;
+
+  // List of lists of ContentAnalysisRequests -- each inner list is the list
+  // of requests for one remotely dispatched drop event that is still in
+  // analysis.
+  nsTArray<ContentAnalysisRequestList> mRemoteDropRequestListOfLists;
+  std::map<uint64_t, size_t> mNumDropRequestsRemaining;
+
   bool mParsedUrlLists = false;
 
   friend class ContentAnalysisResponse;

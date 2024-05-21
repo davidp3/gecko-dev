@@ -767,6 +767,10 @@ class ContentChild final : public PContentChild,
   mozilla::ipc::IPCResult RecvInitNextGenLocalStorageEnabled(
       const bool& aEnabled);
 
+  MOZ_CAN_RUN_SCRIPT_BOUNDARY mozilla::ipc::IPCResult
+  RecvContentAnalysisDropResult(const MaybeDiscardedBrowsingContext& aContext,
+                                bool aWasAllow);
+
  public:
   static void DispatchBeforeUnloadToSubtree(
       BrowsingContext* aStartingAt,

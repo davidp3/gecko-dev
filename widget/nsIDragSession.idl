@@ -9,19 +9,29 @@
 
 %{ C++
 #include "mozilla/EventForwards.h"
+#include "nsIFrame.h"
 #include "nsSize.h"
 
-namespace mozilla::dom {
+class nsIContent;
+
+namespace mozilla {
+class WidgetDragEvent;
+namespace dom {
 class BrowserParent;
-}
+}  // namespace dom
+}  // namespace mozilla
 %}
 
+interface nsIContent;
 interface nsIContentSecurityPolicy;
+interface nsIFrame;
 
 [ptr] native BrowserParentPtr(mozilla::dom::BrowserParent);
 native EventMessage(mozilla::EventMessage);
+[ptr] native WidgetDragEventPtr(mozilla::WidgetDragEvent);
 native nsSize(nsSize);
 
+webidl BrowsingContext;
 webidl DataTransfer;
 webidl Element;
 webidl WindowContext;
@@ -99,6 +109,17 @@ interface nsIDragSession : nsISupports
    */
   attribute nsIContentSecurityPolicy csp;
 
+  cenum ContentAnalysisVerdict : 8 { eUnknown = 0, eAllow = 1, eDeny = 2 };
+  readonly attribute nsIDragSession_ContentAnalysisVerdict dropEventContentAnalysisVerdict;
+
+%{ C++
+  nsIDragSession::ContentAnalysisVerdict GetDropEventContentAnalysisVerdict() {
+    nsIDragSession::ContentAnalysisVerdict verdict;
+    MOZ_ALWAYS_SUCCEEDS(GetDropEventContentAnalysisVerdict(&verdict));
+    return verdict;
+  }
+%}
+
   /**
    * The data transfer object for the current drag.
    */
@@ -123,7 +144,9 @@ interface nsIDragSession : nsISupports
 
   void userCancelled();
 
-  void dragEventDispatchedToChildProcess();
+  [notxpcom, nostdcall]
+  void dragEventDispatchedToChildProcess(in WidgetDragEventPtr aEvent,
+                                         in BrowsingContext aBrowsingContext);
 
   // Called when nsIDragSession implementation should update the UI for the
   // drag-and-drop based on the data got from the child process in response to
@@ -209,4 +232,31 @@ interface nsIDragSession : nsISupports
    * Retrun true if nsIDragSession's data is updated.
    */
   [notxpcom, nostdcall] boolean mustUpdateDataTransfer(in EventMessage aMessage);
+
+  /**
+   * True if a drop was issued for this session in this process and the drop
+   * was forwarded to another process for handling.
+   */
+  [notxpcom, nostdcall] boolean wasDropEventForwarded();
+
+  /**
+   * Tell this dragSession, which must have a suspended drop, that content
+   * analysis reported the given result.
+   * It will dispatch a drop or dragleave event to the retained target.
+   */
+  [notxpcom, nostdcall, can_run_script] void ContentAnalysisDropResult(in boolean aWasAllow);
+
+  /**
+   * Tells the drag session that content analysis was requested during
+   * dispatch of a drop and that drop was aborted.
+   */
+  [notxpcom, nostdcall]
+  void setDropRequestedContentAnalysis(in nsIFrame aFrame,
+                                       in nsIContent aContent,
+                                       in WidgetDragEventPtr aEvent);
+
+  /**
+   * True if setDropRequestedContentAnalysis has been called.
+   */
+  [notxpcom, nostdcall] boolean getDropRequestedContentAnalysis();
 };

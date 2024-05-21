@@ -1383,6 +1383,13 @@ class ContentParent final : public PContentParent,
   mozilla::ipc::IPCResult RecvSignalFuzzingReady();
 #endif
 
+  // This doesn't actually run any scripts.  However, it uses methods
+  // that do run scripts when the drop event is not remoted.
+  MOZ_CAN_RUN_SCRIPT_BOUNDARY mozilla::ipc::IPCResult RecvAnalyzeDropEvent(
+      const MaybeDiscardedBrowsingContext& aContext);
+  mozilla::ipc::IPCResult RecvCancelAnalyzeDropEvent(
+      const MaybeDiscardedBrowsingContext& aContext);
+
  public:
   void SendGetFilesResponseAndForget(const nsID& aID,
                                      const GetFilesResponseResult& aResult);

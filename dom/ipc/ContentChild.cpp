@@ -4670,6 +4670,23 @@ void ContentChild::ConfigureThreadPerformanceHints(
   }
 }
 
+mozilla::ipc::IPCResult ContentChild::RecvContentAnalysisDropResult(
+    const MaybeDiscardedBrowsingContext& aContext, bool aWasAllow) {
+  if (NS_WARN_IF(aContext.IsNullOrDiscarded())) {
+    return IPC_OK();
+  }
+  BrowsingContext* bc = aContext.get();
+  nsGlobalWindowOuter* window =
+      bc ? nsGlobalWindowOuter::Cast(bc->GetDOMWindow()) : nullptr;
+  RefPtr<nsIWidget> widget = window ? window->GetNearestWidget() : nullptr;
+  RefPtr<nsIDragSession> session = widget ? widget->GetDragSession() : nullptr;
+  if (NS_WARN_IF(!session)) {
+    return IPC_OK();
+  }
+  session->ContentAnalysisDropResult(aWasAllow);
+  return IPC_OK();
+}
+
 }  // namespace dom
 
 #if defined(__OpenBSD__) && defined(MOZ_SANDBOX)

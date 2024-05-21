@@ -2031,7 +2031,8 @@ void EventStateManager::DispatchCrossProcessEvent(WidgetEvent* aEvent,
       nsCOMPtr<nsIDragSession> dragSession =
           widget ? widget->GetDragSession() : nullptr;
       if (dragSession) {
-        dragSession->DragEventDispatchedToChildProcess();
+        dragSession->DragEventDispatchedToChildProcess(
+            aEvent->AsDragEvent(), browserParent->GetBrowsingContext());
         dragSession->GetDragAction(&action);
         dragSession->GetTriggeringPrincipal(getter_AddRefs(principal));
         dragSession->GetCsp(getter_AddRefs(csp));

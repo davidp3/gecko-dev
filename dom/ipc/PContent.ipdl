@@ -1040,6 +1040,12 @@ child:
 
     async PRemotePrintJob();
 
+    // Sent to a content that is waiting for a CA result to know whether to
+    // allow sending a drop event, or to cancel the drag session with a
+    // dragleave.
+    async ContentAnalysisDropResult(MaybeDiscardedBrowsingContext aContext,
+                                    bool aWasAllow);
+
 parent:
     async SynchronizeLayoutHistoryState(MaybeDiscardedBrowsingContext aContext,
                                         nullable nsILayoutHistoryState aState);
@@ -1804,6 +1810,14 @@ parent:
     // destroyed in the content process to clean up pending state left behind
     // tracking the load state in the parent process.
     [LazySend] async CleanupPendingLoadState(uint64_t aLoadIdentifier);
+
+    // Tell content analysis to start checking the items in the drop that
+    // was sent to the given context.
+    async AnalyzeDropEvent(MaybeDiscardedBrowsingContext aContext);
+
+    // Tell content analysis to cancel checking the items in the drop that
+    // was sent to the given context.
+    async CancelAnalyzeDropEvent(MaybeDiscardedBrowsingContext aContext);
 
 both:
     async ScriptError(nsString message, nsString sourceName, nsString sourceLine,

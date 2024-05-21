@@ -22,6 +22,7 @@
 #include "VRManagerChild.h"
 #include "mozilla/Assertions.h"
 #include "mozilla/BasePrincipal.h"
+#include "mozilla/Components.h"
 #include "mozilla/EventForwards.h"
 #include "mozilla/EventListenerManager.h"
 #include "mozilla/HoldDropJSObjects.h"
@@ -90,6 +91,7 @@
 #include "nsIBaseWindow.h"
 #include "nsIBrowserDOMWindow.h"
 #include "nsIClassifiedChannel.h"
+#include "nsIContentAnalysis.h"
 #include "nsIDocShell.h"
 #include "nsIFrame.h"
 #include "nsILoadContext.h"
@@ -1883,7 +1885,8 @@ mozilla::ipc::IPCResult BrowserChild::RecvRealDragEvent(
     }
   }
 
-  if (aEvent.mMessage == eDrop) {
+  bool isDrop = aEvent.mMessage == eDrop;
+  if (isDrop) {
     bool canDrop = true;
     if (!dragSession || NS_FAILED(dragSession->GetCanDrop(&canDrop)) ||
         !canDrop) {
@@ -1898,6 +1901,22 @@ mozilla::ipc::IPCResult BrowserChild::RecvRealDragEvent(
   }
 
   DispatchWidgetEventViaAPZ(localEvent);
+
+  if (dragSession && isDrop &&
+      (dragSession->GetDropEventContentAnalysisVerdict() ==
+       nsIDragSession::ContentAnalysisVerdict::eUnknown) &&
+      !dragSession->WasDropEventForwarded() &&
+      !dragSession->GetDropRequestedContentAnalysis()) {
+    RefPtr<nsIContentAnalysis> ca =
+        mozilla::components::nsIContentAnalysis::Service();
+    bool isActive = false;
+    if (ca && NS_SUCCEEDED(ca->GetMightBeActive(&isActive)) && isActive) {
+      // The event was preempted by something other than content analysis.
+      // Cancel the CA modal dialog.
+      ContentChild::GetSingleton()->SendCancelAnalyzeDropEvent(
+          GetBrowsingContext());
+    }
+  }
   return IPC_OK();
 }
 

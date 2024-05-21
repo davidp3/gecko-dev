@@ -8180,6 +8180,39 @@ IPCResult ContentParent::RecvSignalFuzzingReady() {
 }
 #endif
 
+IPCResult ContentParent::RecvAnalyzeDropEvent(
+    const MaybeDiscardedBrowsingContext& aContext) {
+  if (NS_WARN_IF(aContext.IsNullOrDiscarded())) {
+    return IPC_OK();
+  }
+
+  RefPtr<nsIContentAnalysis> ca =
+      mozilla::components::nsIContentAnalysis::Service();
+  if (NS_WARN_IF(!ca)) {
+    return IPC_OK();
+  }
+  RefPtr<BrowsingContext> cxt = aContext.get();
+  ca->AnalyzeRemoteDropEvent(cxt);
+  return IPC_OK();
+}
+
+IPCResult ContentParent::RecvCancelAnalyzeDropEvent(
+    const MaybeDiscardedBrowsingContext& aContext) {
+  if (NS_WARN_IF(aContext.IsNullOrDiscarded())) {
+    return IPC_OK();
+  }
+  // Cancel outstanding CA "requests".  They have not been sent to the agent.
+  RefPtr<nsIContentAnalysis> ca =
+      mozilla::components::nsIContentAnalysis::Service();
+  if (NS_WARN_IF(!ca)) {
+    return IPC_OK();
+  }
+
+  RefPtr<dom::BrowsingContext> bc = aContext.get();
+  ca->CancelAllRequestsForDrop(bc);
+  return IPC_OK();
+}
+
 nsCString ThreadsafeContentParentHandle::GetRemoteType() {
   RecursiveMutexAutoLock lock(mMutex);
   return mRemoteType;

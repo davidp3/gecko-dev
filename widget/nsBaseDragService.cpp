@@ -4,7 +4,6 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsBaseDragService.h"
-#include "nsITransferable.h"
 
 #include "nsArrayUtils.h"
 #include "nsITransferable.h"
@@ -37,6 +36,7 @@
 #include "mozilla/ViewportUtils.h"
 #include "mozilla/dom/BindingDeclarations.h"
 #include "mozilla/dom/BrowserParent.h"
+#include "mozilla/dom/CanonicalBrowsingContext.h"
 #include "mozilla/dom/ContentParent.h"
 #include "mozilla/dom/DataTransferItemList.h"
 #include "mozilla/dom/DataTransfer.h"
@@ -51,6 +51,7 @@
 #include "gfxPlatform.h"
 #include "nscore.h"
 #include "MockDragServiceController.h"
+#include "ContentAnalysis.h"
 
 #include <algorithm>
 
@@ -696,6 +697,19 @@ nsBaseDragSession::EndDragSession(nsISupports* aWidgetProvider, bool aDoneDrag,
     }
   }
 
+  if (mDropRequestedContentAnalysis && !mDropEventRemoteBrowsingContextId &&
+      mDropEventContentAnalysisVerdict == ContentAnalysisVerdict::eUnknown) {
+    if (mDropData.mEndDragSessionData.mWidget) {
+      // EndDragSession was previously called, so ignore this.
+      return NS_OK;
+    }
+    // Content analysis is needed for this session's drop event,
+    // in this process.  Delay running EndDragSession to avoid losing
+    // the session.  Record that EndDragSession was called so we can
+    // re-issue it when ready.
+    mDropData.mEndDragSessionData = {widget.get(), aDoneDrag, aKeyModifiers};
+    return NS_OK;
+  }
   return EndDragSessionImpl(widget, aDoneDrag, aKeyModifiers);
 }
 
@@ -1124,10 +1138,12 @@ nsBaseDragSession::UpdateDragImage(nsINode* aImage, int32_t aImageX,
   return NS_OK;
 }
 
-NS_IMETHODIMP
-nsBaseDragSession::DragEventDispatchedToChildProcess() {
+void nsBaseDragSession::DragEventDispatchedToChildProcess(
+    WidgetDragEvent* aEvent, BrowsingContext* aBC) {
   mDragEventDispatchedToChildProcess = true;
-  return NS_OK;
+  if (aEvent->mMessage == eDrop) {
+    SetDropEventWasForwardedTo(aBC);
+  }
 }
 
 bool nsBaseDragSession::MaybeAddBrowser(BrowserParent* aBP) {
@@ -1212,4 +1228,90 @@ NS_IMETHODIMP
 nsBaseDragSession::SetDragEndPoint(int32_t aScreenX, int32_t aScreenY) {
   SetDragEndPoint(LayoutDeviceIntPoint(aScreenX, aScreenY));
   return NS_OK;
+}
+
+void nsBaseDragSession::SetDropEventWasForwardedTo(BrowsingContext* aBC) {
+  MOZ_ASSERT(aBC);
+
+  mDropEventRemoteBrowsingContextId = Some(aBC->Id());
+
+  if (XRE_IsParentProcess()) {
+    // If content analysis is active, the eventual content target will send
+    // a complete content analysis request, or it will undo the prep work
+    // we do here.
+    CanonicalBrowsingContext* cbc = aBC->Canonical();
+    mozilla::contentanalysis::ContentAnalysis::
+        PrepareForDropEventAnalysisRequest(GetDataTransfer(),
+                                           cbc->GetCurrentWindowGlobal());
+  }
+}
+
+bool nsBaseDragSession::WasDropEventForwarded() {
+  return mDropEventRemoteBrowsingContextId.isSome();
+}
+
+NS_IMETHODIMP
+nsBaseDragSession::GetDropEventContentAnalysisVerdict(
+    nsIDragSession::ContentAnalysisVerdict* aVerdict) {
+  *aVerdict = mDropEventContentAnalysisVerdict;
+  return NS_OK;
+}
+
+nsBaseDragSession::ContentAnalysisDropData::~ContentAnalysisDropData() {
+  delete mEvent;
+}
+
+void nsBaseDragSession::ContentAnalysisDropData::Clear() {
+  mFrame = nullptr;
+  mContent = nullptr;
+}
+
+nsBaseDragSession::ContentAnalysisDropData&
+nsBaseDragSession::ContentAnalysisDropData::operator=(
+    const ContentAnalysisDropData& o) {
+  mFrame = const_cast<WeakFrame&>(o.mFrame);
+  mContent = o.mContent;
+  mEvent = o.mEvent->Duplicate()->AsDragEvent();
+  mEvent->mWidget = o.mEvent->mWidget;
+  return *this;
+}
+
+bool nsBaseDragSession::GetDropRequestedContentAnalysis() {
+  return !!mDropData.mEvent;
+}
+
+void nsBaseDragSession::SetDropRequestedContentAnalysis(
+    nsIFrame* aFrame, nsIContent* aContent, WidgetDragEvent* aEvent) {
+  mDropRequestedContentAnalysis = true;
+  mDropData.mFrame = aFrame;
+  mDropData.mContent = aContent;
+  mDropData.mEvent = aEvent->Duplicate()->AsDragEvent();
+  mDropData.mEvent->mWidget = aEvent->mWidget;
+}
+
+void nsBaseDragSession::ContentAnalysisDropResult(bool aWasAllow) {
+  if (!mDropData.mFrame || !mDropData.mFrame->PresContext()->GetPresShell()) {
+    return;
+  }
+
+  mDropEventContentAnalysisVerdict = aWasAllow ? ContentAnalysisVerdict::eAllow
+                                               : ContentAnalysisVerdict::eDeny;
+
+  WidgetDragEvent* event = mDropData.mEvent;
+  if (!aWasAllow) {
+    event->mMessage = eDragLeave;
+  }
+
+  nsEventStatus status = nsEventStatus_eIgnore;
+  RefPtr<PresShell> ps = mDropData.mFrame->PresContext()->GetPresShell();
+  RefPtr<nsIContent> content = mDropData.mContent;
+  ps->HandleEventWithTarget(event, mDropData.mFrame, content, &status);
+
+  // If EndDragSession was delayed, issue it now.
+  if (mDropData.mEndDragSessionData.mWidget) {
+    RefPtr<nsIWidget> widget = mDropData.mEndDragSessionData.mWidget;
+    EndDragSession(widget, mDropData.mEndDragSessionData.mDoneDrag,
+                   mDropData.mEndDragSessionData.mKeyModifiers);
+  }
+  mDropData.Clear();
 }

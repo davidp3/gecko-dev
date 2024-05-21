@@ -6,6 +6,8 @@
 #include "nsISupports.idl"
 
 interface nsIURI;
+webidl BrowsingContext;
+webidl DataTransfer;
 webidl WindowGlobalParent;
 
 [scriptable, uuid(06e6a60f-3a2b-41fa-a63b-fea7a7f71649)]
@@ -255,7 +257,23 @@ interface nsIContentAnalysis : nsISupports
    * @param callback
    *        Callbacks to be called when the agent sends a response message (or when there is an error).
    */
-  void analyzeContentRequestCallback(in nsIContentAnalysisRequest aCar, in boolean aAutoAcknowledge, in nsIContentAnalysisCallback callback);
+  void analyzeContentRequestCallback(in nsIContentAnalysisRequest aCar, in boolean aAutoAcknowledge,
+                                     in nsIContentAnalysisCallback callback);
+
+  /**
+   * Called when a drop is received in the parent process.  aBC is the context
+   * of the element.  We only perform CA on elements with a browsing context so
+   * aBC is not null.
+   */
+  void analyzeLocalDropEvent(in DataTransfer aDataTransfer, in BrowsingContext aBC);
+
+  /**
+   * Called when a drop is received in its remote target.  aBC is the context
+   * of that remote target.
+   */
+  [can_run_script] void analyzeRemoteDropEvent(in BrowsingContext aBC);
+
+  void cancelAllRequestsForDrop(in BrowsingContext aContext);
 
   /**
    * Cancels the request that is in progress. This may not actually cancel the request

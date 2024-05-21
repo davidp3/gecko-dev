@@ -11,10 +11,17 @@
 #include "base/process_util.h"
 #include "GMPUtils.h"  // ToHexString
 #include "mozilla/Components.h"
+#include "mozilla/dom/BlobImpl.h"
 #include "mozilla/dom/CanonicalBrowsingContext.h"
+#include "mozilla/dom/ContentChild.h"
+#include "mozilla/dom/ContentParent.h"
+#include "mozilla/dom/Document.h"
+#include "mozilla/dom/DragEvent.h"
 #include "mozilla/dom/Promise.h"
 #include "mozilla/dom/WindowGlobalParent.h"
 #include "mozilla/Logging.h"
+#include "mozilla/MouseEvents.h"
+#include "mozilla/PresShell.h"
 #include "mozilla/ScopeExit.h"
 #include "mozilla/Services.h"
 #include "mozilla/SpinEventLoopUntil.h"
@@ -23,8 +30,10 @@
 #include "nsAppRunner.h"
 #include "nsBaseClipboard.h"
 #include "nsComponentManagerUtils.h"
+#include "nsFrameLoaderOwner.h"
 #include "nsIClassInfoImpl.h"
 #include "nsIFile.h"
+#include "nsIFrame.h"
 #include "nsIGlobalObject.h"
 #include "nsIObserverService.h"
 #include "nsIOutputStream.h"
@@ -33,6 +42,7 @@
 #include "nsISupportsPrimitives.h"
 #include "nsITransferable.h"
 #include "ScopedNSSTypes.h"
+#include "nsQueryObject.h"
 #include "xpcpublic.h"
 
 #include <algorithm>
@@ -224,6 +234,8 @@ ContentAnalysisRequest::GetWindowGlobalParent(
   NS_IF_ADDREF(*aWindowGlobalParent = mWindowGlobalParent);
   return NS_OK;
 }
+
+void ContentAnalysisRequest::SetUrl(nsIURI* aUrl) { mUrl = aUrl; }
 
 nsresult ContentAnalysis::CreateContentAnalysisClient(
     nsCString&& aPipePathName, nsString&& aClientSignatureSetting,
@@ -1436,11 +1448,19 @@ NS_IMETHODIMP
 ContentAnalysis::AnalyzeContentRequestCallback(
     nsIContentAnalysisRequest* aRequest, bool aAutoAcknowledge,
     nsIContentAnalysisCallback* aCallback) {
+  return AnalyzeContentRequestCallback(aRequest, aAutoAcknowledge, aCallback,
+                                       false);
+}
+
+nsresult ContentAnalysis::AnalyzeContentRequestCallback(
+    nsIContentAnalysisRequest* aRequest, bool aAutoAcknowledge,
+    nsIContentAnalysisCallback* aCallback,
+    bool aDlpRequestMadeWasPreviouslySent) {
   MOZ_ASSERT(NS_IsMainThread());
   NS_ENSURE_ARG(aRequest);
   NS_ENSURE_ARG(aCallback);
-  nsresult rv = AnalyzeContentRequestCallbackPrivate(aRequest, aAutoAcknowledge,
-                                                     aCallback);
+  nsresult rv = AnalyzeContentRequestCallbackPrivate(
+      aRequest, aAutoAcknowledge, aCallback, aDlpRequestMadeWasPreviouslySent);
   if (NS_FAILED(rv)) {
     nsCString requestToken;
     nsresult requestTokenRv = aRequest->GetRequestToken(requestToken);
@@ -1452,12 +1472,15 @@ ContentAnalysis::AnalyzeContentRequestCallback(
 
 nsresult ContentAnalysis::AnalyzeContentRequestCallbackPrivate(
     nsIContentAnalysisRequest* aRequest, bool aAutoAcknowledge,
-    nsIContentAnalysisCallback* aCallback) {
+    nsIContentAnalysisCallback* aCallback,
+    bool aDlpRequestMadeWasPreviouslySent) {
   // Make sure we send the notification first, so if we later return
   // an error the JS will handle it correctly.
-  nsCOMPtr<nsIObserverService> obsServ =
-      mozilla::services::GetObserverService();
-  obsServ->NotifyObservers(aRequest, "dlp-request-made", nullptr);
+  if (!aDlpRequestMadeWasPreviouslySent) {
+    nsCOMPtr<nsIObserverService> obsServ =
+        mozilla::services::GetObserverService();
+    obsServ->NotifyObservers(aRequest, "dlp-request-made", nullptr);
+  }
 
   bool isActive;
   nsresult rv = GetIsActive(&isActive);
@@ -1980,6 +2003,448 @@ bool ContentAnalysis::CheckClipboardContentAnalysisSync(
   mozilla::SpinEventLoopUntil("CheckClipboardContentAnalysisSync"_ns,
                               [&requestDone]() -> bool { return requestDone; });
   return result->GetShouldAllowContent();
+}
+
+static void AddTextContentAnalysis(nsString&& aStringData, nsIURI* aDocumentURI,
+                                   dom::WindowGlobalParent* aWindowGlobalParent,
+                                   ContentAnalysisRequestList* aRequestList) {
+  aRequestList->AppendElement(new ContentAnalysisRequest(
+      nsIContentAnalysisRequest::AnalysisType::eBulkDataEntry,
+      std::move(aStringData), false, EmptyCString(), aDocumentURI,
+      nsIContentAnalysisRequest::OperationType::eDroppedText,
+      aWindowGlobalParent));
+}
+
+static void AddFileContentAnalysis(nsString&& aFilePath, nsIURI* aDocumentURI,
+                                   dom::WindowGlobalParent* aWindowGlobalParent,
+                                   ContentAnalysisRequestList* aRequestList) {
+  aRequestList->AppendElement(new ContentAnalysisRequest(
+      nsIContentAnalysisRequest::AnalysisType::eBulkDataEntry,
+      std::move(aFilePath), true, EmptyCString(), aDocumentURI,
+      nsIContentAnalysisRequest::OperationType::eCustomDisplayString,
+      aWindowGlobalParent));
+}
+
+nsresult ContentAnalysis::MakeDropRequests(
+    dom::DataTransfer* aDataTransfer,
+    dom::WindowGlobalParent* aWindowGlobalParent,
+    ContentAnalysisRequestList* aRequestList) {
+  nsresult rv = NS_OK;
+  // Hold a strong reference during the event loop below.
+  RefPtr<const dom::DataTransferItemList> itemList = aDataTransfer->Items();
+
+  nsTArray<nsString> filePaths;
+  // These items are grouped together by Index() - every item with the same
+  // Index() is a different representation of the same underlying data.
+  // So we only need to check one of them.
+  Maybe<uint32_t> lastCheckedStringIndex = Nothing();
+
+  LOGD("Creating content analysis requests for %d dropped items",
+       itemList->Length());
+  for (uint32_t i = 0; i < itemList->Length(); ++i) {
+    bool found;
+    dom::DataTransferItem* item = itemList->IndexedGetter(i, found);
+    MOZ_ASSERT(found);
+    if (item->Kind() == dom::DataTransferItem::KIND_STRING) {
+      // Skip mozilla-internal context around HTML
+      nsString type;
+      item->GetType(type);
+      if (type.EqualsASCII(kHTMLContext) || type.EqualsASCII(kHTMLInfo)) {
+        continue;
+      }
+      if (Some(item->Index()) == lastCheckedStringIndex) {
+        // Already checked a representation of this underlying data
+        continue;
+      }
+      ErrorResult errorResult;
+      nsCOMPtr<nsIVariant> data =
+          item->Data(nsContentUtils::GetSystemPrincipal(), errorResult);
+      if (errorResult.Failed()) {
+        NS_WARNING("Failed to get data from dragged KIND_STRING");
+        return errorResult.StealNSResult();
+      }
+      if (!data) {
+        // due to aPrincipal?
+        continue;
+      }
+
+      nsString stringData;
+      rv = data->GetAsAString(stringData);
+      NS_ENSURE_SUCCESS(rv, rv);
+
+      AddTextContentAnalysis(std::move(stringData), nullptr /* documentURI */,
+                             aWindowGlobalParent, aRequestList);
+
+      lastCheckedStringIndex = Some(item->Index());
+    } else if (item->Kind() == dom::DataTransferItem::KIND_FILE) {
+      nsString path;
+      ErrorResult errorResult;
+      nsCOMPtr<nsIVariant> data =
+          item->Data(nsContentUtils::GetSystemPrincipal(), errorResult);
+      if (errorResult.Failed()) {
+        NS_WARNING("Failed to get data from dragged KIND_FILE");
+        return errorResult.StealNSResult();
+      }
+      nsCOMPtr<nsISupports> supports;
+      errorResult = data->GetAsISupports(getter_AddRefs(supports));
+      MOZ_ASSERT(!errorResult.Failed() && supports,
+                 "File objects should be stored as nsISupports variants");
+      if (nsCOMPtr<dom::BlobImpl> blobImpl = do_QueryInterface(supports)) {
+        MOZ_ASSERT(blobImpl->IsFile());
+        blobImpl->GetMozFullPath(path, dom::SystemCallerGuarantee(),
+                                 errorResult);
+        if (errorResult.Failed()) {
+          NS_WARNING("Failed to get path from dragged KIND_FILE blob");
+          return errorResult.StealNSResult();
+        }
+      } else if (nsCOMPtr<nsIFile> ifile = do_QueryInterface(supports)) {
+        ifile->GetPath(path);
+      }
+      if (!path.IsEmpty()) {
+        AddFileContentAnalysis(std::move(path), nullptr /* documentURI */,
+                               aWindowGlobalParent, aRequestList);
+      }
+    }
+  }
+  return NS_OK;
+}
+
+/* static */
+nsresult ContentAnalysis::PrepareForDropEventAnalysisRequest(
+    dom::DataTransfer* aDataTransfer,
+    dom::WindowGlobalParent* aWindowGlobalParent) {
+  MOZ_ASSERT(XRE_IsParentProcess());
+
+  // Do nothing if content analysis isn't enabled.
+  RefPtr<ContentAnalysis> ca = ContentAnalysis::GetContentAnalysisFromService();
+  NS_ENSURE_TRUE(ca, NS_OK);
+  bool isActive = false;
+  if (NS_FAILED(ca->GetIsActive(&isActive)) || MOZ_LIKELY(!isActive)) {
+    return NS_OK;
+  }
+
+  // If Content Analysis is active then tell it to present a modal
+  // dialog to prevent input.  It will soon get a request, from the
+  // content process, to analyze the drop event (or to dismiss the modal).
+
+  // Make the CA request now but omit the URL.  We are almost guaranteed to
+  // need this later and doing it allows us to tailor the modal dialog
+  // contents to the request.
+  ContentAnalysisRequestList caRequests;
+  nsresult rv =
+      ca->MakeDropRequests(aDataTransfer, aWindowGlobalParent, &caRequests);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  // Tell UI to present modal over this content.
+  nsCOMPtr<nsIObserverService> obsServ =
+      mozilla::services::GetObserverService();
+  for (const auto& caRequest : caRequests) {
+    obsServ->NotifyObservers(caRequest, "dlp-request-made", nullptr);
+  }
+
+  // A request is not complete without the URL of the drop target.  Store them
+  // so that we can properly submit the requests when we get the URL from
+  // content.
+  if (!caRequests.IsEmpty()) {
+    ca->mRemoteDropRequestListOfLists.AppendElement(std::move(caRequests));
+  }
+  return NS_OK;
+}
+
+void ContentAnalysis::SetResponseWaitCount(uint64_t aBrowsingContextId,
+                                           size_t aNumToWait) {
+  if (aNumToWait == 0) {
+    mNumDropRequestsRemaining.erase(aBrowsingContextId);
+    return;
+  }
+  mNumDropRequestsRemaining[aBrowsingContextId] = aNumToWait;
+}
+
+// Returns the decremented value.
+size_t ContentAnalysis::DecrementResponseWaitCount(
+    uint64_t aBrowsingContextId) {
+  auto it = mNumDropRequestsRemaining.find(aBrowsingContextId);
+  if (it == mNumDropRequestsRemaining.end()) {
+    // Cancel removed our entry but was too late to stop this callback.
+    // Ignore.
+    return 0;
+  }
+  size_t numRemaining = it->second;
+  MOZ_ASSERT(numRemaining > 0);
+  --numRemaining;
+  SetResponseWaitCount(aBrowsingContextId, numRemaining);
+  return numRemaining;
+}
+
+MOZ_CAN_RUN_SCRIPT static void SendDragEventVerdict(
+    dom::CanonicalBrowsingContext* aCBC, bool aIsRemote, bool aWasAllow) {
+  if (aIsRemote) {
+    dom::ContentParent* cp = aCBC->GetContentParent();
+    NS_ENSURE_TRUE_VOID(cp);
+    Unused << cp->SendContentAnalysisDropResult(aCBC, aWasAllow);
+    return;
+  }
+
+  // drop was in this process so the session is still set on the widget.
+  RefPtr<nsIWidget> widget = aCBC->GetParentProcessWidgetContaining();
+  NS_ENSURE_TRUE_VOID(widget);
+  RefPtr<nsIDragSession> session = widget->GetDragSession();
+  NS_ENSURE_TRUE_VOID(session);
+  session->ContentAnalysisDropResult(true);
+}
+
+void ContentAnalysis::SendDragleaveAndCancelRemaining(uint64_t bcId,
+                                                      bool aIsRemote) {
+  RefPtr<dom::CanonicalBrowsingContext> cbc =
+      dom::CanonicalBrowsingContext::Get(bcId);
+  if (NS_WARN_IF(!cbc)) {
+    return;
+  }
+  CancelAllRequestsForDrop(cbc);
+  SetResponseWaitCount(bcId, 0);
+  SendDragEventVerdict(cbc, aIsRemote, false /* aWasAllow */);
+}
+
+void ContentAnalysis::SendApprovedDrop(uint64_t bcId, bool aIsRemote) {
+  RefPtr<dom::CanonicalBrowsingContext> cbc =
+      dom::CanonicalBrowsingContext::Get(bcId);
+  if (NS_WARN_IF(!cbc)) {
+    return;
+  }
+
+  // If a DENY result already came for an earlier part of the drop then
+  // the entry will not be found in the list.
+  bool foundRequests = false;
+  for (size_t idx = 0; idx < mRemoteDropRequestListOfLists.Length(); ++idx) {
+    auto& requestList = mRemoteDropRequestListOfLists[idx];
+    // All entries in list will be from the same drop.
+    MOZ_ASSERT(!requestList.IsEmpty());
+    if (!cbc->IsInSubtreeOf(
+            requestList[0]->GetWindowGlobalParent()->GetBrowsingContext())) {
+      continue;
+    }
+    // Submit matching request list to agent and remove.
+    foundRequests = true;
+    mRemoteDropRequestListOfLists.RemoveElementAt(idx);
+  }
+  if (!foundRequests) {
+    NS_WARNING("SendApprovedDrop didn't find the requests to cancel");
+  }
+  SendDragEventVerdict(cbc, aIsRemote, true /* aWasAllow */);
+}
+
+/* static */
+already_AddRefed<nsIContentAnalysisCallback>
+ContentAnalysis::MakeDropRequestCallback(uint64_t aBrowsingContextId,
+                                         bool aIsRemote) {
+  RefPtr<nsIContentAnalysisCallback> ret = new ContentAnalysisCallback(
+      [aBrowsingContextId, aIsRemote](nsIContentAnalysisResponse* aResponse)
+          MOZ_CAN_RUN_SCRIPT_BOUNDARY_LAMBDA {
+            RefPtr<ContentAnalysis> ca =
+                ContentAnalysis::GetContentAnalysisFromService();
+            if (NS_WARN_IF(!ca)) {
+              return;
+            }
+            bool shouldAllow = false;
+            if (NS_FAILED(aResponse->GetShouldAllowContent(&shouldAllow)) ||
+                !shouldAllow) {
+              ca->SendDragleaveAndCancelRemaining(aBrowsingContextId,
+                                                  true /* isRemote */);
+              return;
+            }
+            if (ca->DecrementResponseWaitCount(aBrowsingContextId) == 0) {
+              // All were approved so issue approved drop
+              ca->SendApprovedDrop(aBrowsingContextId, aIsRemote);
+            }
+          },
+      [aBrowsingContextId](nsresult rv) MOZ_CAN_RUN_SCRIPT_BOUNDARY_LAMBDA {
+        // Send dragleave event and cancel any remaining CA for this drop.
+        RefPtr<ContentAnalysis> ca =
+            ContentAnalysis::GetContentAnalysisFromService();
+        if (NS_WARN_IF(!ca)) {
+          return;
+        }
+        ca->SendDragleaveAndCancelRemaining(aBrowsingContextId,
+                                            true /* isRemote */);
+      });
+  return ret.forget();
+}
+
+NS_IMETHODIMP
+ContentAnalysis::AnalyzeRemoteDropEvent(dom::BrowsingContext* aBC) {
+  MOZ_ASSERT(XRE_IsParentProcess());
+  RefPtr<dom::CanonicalBrowsingContext> cbc = aBC->Canonical();
+  MOZ_ASSERT(cbc);
+  uint64_t bcId = cbc->Id();
+
+  RefPtr<nsIURI> url = cbc->GetCurrentURI();
+  if (NS_WARN_IF(!url)) {
+    SendDragleaveAndCancelRemaining(bcId, true /* isRemote */);
+    return NS_ERROR_FAILURE;
+  }
+
+  DebugOnly<bool> foundRequests = false;
+  for (size_t idx = 0; idx < mRemoteDropRequestListOfLists.Length(); ++idx) {
+    auto& requestList = mRemoteDropRequestListOfLists[idx];
+    // All entries in list will be from the same drop.
+    MOZ_ASSERT(!requestList.IsEmpty());
+    if (!cbc->IsInSubtreeOf(
+            requestList[0]->GetWindowGlobalParent()->GetBrowsingContext())) {
+      continue;
+    }
+    // Submit matching request list to agent and remove.
+    foundRequests = true;
+    SetResponseWaitCount(bcId, requestList.Length());
+    RefPtr<nsIContentAnalysisCallback> dropCB =
+        MakeDropRequestCallback(bcId, true /* isRemote */);
+    for (const auto& request : requestList) {
+      request->SetUrl(url);
+      DebugOnly<nsresult> rv = AnalyzeContentRequestCallback(
+          request, true /* autoAcknowledge */, dropCB,
+          true /* aDlpRequestMadeWasPreviouslySent */);
+      // Nothing to do in case of error
+      MOZ_ASSERT(NS_SUCCEEDED(rv));
+    }
+    // There should be exactly one match.
+    break;
+  }
+  MOZ_ASSERT(foundRequests);
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+ContentAnalysis::AnalyzeLocalDropEvent(dom::DataTransfer* aDataTransfer,
+                                       dom::BrowsingContext* aBC) {
+  MOZ_ASSERT(XRE_IsParentProcess());
+  RefPtr<dom::CanonicalBrowsingContext> cbc = aBC->Canonical();
+  MOZ_ASSERT(cbc);
+  ContentAnalysisRequestList caRequests;
+  dom::WindowGlobalParent* windowGlobalParent = cbc->GetCurrentWindowGlobal();
+  nsresult rv =
+      MakeDropRequests(aDataTransfer, windowGlobalParent, &caRequests);
+  NS_ENSURE_SUCCESS(rv, rv);
+  if (caRequests.Length() == 0) {
+    // nothing to check
+    return NS_OK;
+  }
+  uint64_t bcId = cbc->Id();
+  SetResponseWaitCount(bcId, caRequests.Length());
+  RefPtr<nsIContentAnalysisCallback> dropCB =
+      MakeDropRequestCallback(bcId, true /* isRemote */);
+  for (const auto& request : caRequests) {
+    rv = AnalyzeContentRequestCallback(request, true /* autoAcknowledge */,
+                                       dropCB);
+    // Nothing to do in case of error
+    MOZ_ASSERT(NS_SUCCEEDED(rv));
+  }
+  return NS_OK;
+}
+
+/* static */
+nsresult ContentAnalysis::ConsiderDropEvent(PresShell* aPresShell,
+                                            WidgetDragEvent* aEvent,
+                                            nsIFrame* aFrame) {
+  MOZ_ASSERT(aEvent->mClass == eDragEventClass);
+  MOZ_ASSERT(aEvent->mMessage == eDrop);
+  // Do nothing unless content analysis is active.
+  RefPtr<ContentAnalysis> ca =
+      mozilla::components::nsIContentAnalysis::Service();
+  bool isActive = false;
+  if (NS_WARN_IF(!ca) || NS_FAILED(ca->GetMightBeActive(&isActive)) ||
+      !isActive) {
+    return NS_OK;
+  }
+
+  nsIDragSession* dragSession = aEvent->mWidget->GetDragSession();
+  nsIDragSession::ContentAnalysisVerdict verdict;
+  if (!dragSession ||
+      NS_FAILED(dragSession->GetDropEventContentAnalysisVerdict(&verdict)) ||
+      verdict != nsIDragSession::ContentAnalysisVerdict::eUnknown) {
+    return NS_OK;
+  }
+
+  RefPtr<nsIContent> targetContent;
+  aFrame->GetContentForEvent(aEvent, getter_AddRefs(targetContent));
+  if (!targetContent) {
+    return NS_OK;
+  }
+  RefPtr<nsFrameLoaderOwner> owner = do_QueryObject(targetContent);
+  if (owner) {
+    RefPtr<nsFrameLoader> loader = owner->GetFrameLoader();
+    if (loader && loader->IsRemoteFrame()) {
+      // If this drop event needs content analysis, the request should
+      // come from the remote context.
+      return NS_OK;
+    }
+  }
+
+  dom::BrowsingContext* bc = targetContent->OwnerDoc()->GetBrowsingContext();
+  if (!bc) {
+    // Target content that is not in a browsing context does not need
+    // content analysis' permission.
+    return NS_OK;
+  }
+
+  // SetDataTransferInEvent will use this to establish whether the
+  // event has permission to access the DataTransfer's contents.
+  aEvent->mTarget = targetContent;
+  aEvent->mOriginalTarget = targetContent;
+
+  // Set the data transfer now because it will be too late if we wait for
+  // the dispatch after CA -- it may be replaced with a new one by then.
+  nsresult rv = nsContentUtils::SetDataTransferInEvent(aEvent);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  dragSession->SetDropRequestedContentAnalysis(aFrame, targetContent, aEvent);
+
+  aEvent->StopPropagation();
+  aEvent->PreventDefault();
+
+  if (auto* cc = dom::ContentChild::GetSingleton()) {
+    return cc->SendAnalyzeDropEvent(bc) ? NS_OK : NS_ERROR_FAILURE;
+  }
+  return ca->AnalyzeLocalDropEvent(aEvent->mDataTransfer, bc);
+}
+
+NS_IMETHODIMP
+ContentAnalysis::CancelAllRequestsForDrop(dom::BrowsingContext* aContext) {
+  MOZ_ASSERT(XRE_IsParentProcess());
+
+  nsCOMPtr<nsIObserverService> obsServ =
+      mozilla::services::GetObserverService();
+  // If a DENY result already came for an earlier part of the drop then
+  // the entry will not be found in the list.
+  bool foundRequests = false;
+  for (size_t idx = 0; idx < mRemoteDropRequestListOfLists.Length(); ++idx) {
+    auto& requestList = mRemoteDropRequestListOfLists[idx];
+    // All entries in list will be from the same drop.
+    MOZ_ASSERT(!requestList.IsEmpty());
+    if (!aContext->IsInSubtreeOf(
+            requestList[0]->GetWindowGlobalParent()->GetBrowsingContext())) {
+      continue;
+    }
+    // Remove entire matching request list.
+    for (auto request : requestList) {
+      // Tell UI to remove modal over this content by giving it a cancel
+      // response.
+      nsCString token;
+      request->GetRequestToken(token);
+      RefPtr<ContentAnalysisResponse> response =
+          ContentAnalysisResponse::FromAction(
+              nsIContentAnalysisResponse::Action::eCanceled, token);
+      obsServ->NotifyObservers(response, "dlp-response", nullptr);
+    }
+    mRemoteDropRequestListOfLists.RemoveElementAt(idx);
+    foundRequests = true;
+    // there is exactly one match
+    break;
+  }
+  if (!foundRequests) {
+    NS_WARNING(
+        "CancelAllRequestsForDrop found no requests to cancel.  "
+        "They may have been canceled earlier.");
+  }
+  return NS_OK;
 }
 
 NS_IMETHODIMP

@@ -17,6 +17,7 @@
 #include "mozilla/dom/MouseEventBinding.h"
 #include "mozilla/dom/RemoteDragStartData.h"
 #include "mozilla/Logging.h"
+#include "mozilla/Maybe.h"
 #include "nsTArray.h"
 #include "nsRegion.h"
 #include "Units.h"
@@ -192,6 +193,11 @@ class nsBaseDragSession : public nsIDragSession {
    */
   void OpenDragPopup();
 
+  // If active, tell CA to present a modal dialog over the remote browser
+  // that the event was forwarded to.  It remains until a content analysis
+  // verdict is in.
+  void SetDropEventWasForwardedTo(mozilla::dom::BrowsingContext* aBC);
+
   RefPtr<mozilla::dom::WindowContext> mSourceWindowContext;
   RefPtr<mozilla::dom::WindowContext> mSourceTopWindowContext;
   nsCOMPtr<nsINode> mSourceNode;
@@ -232,6 +238,28 @@ class nsBaseDragSession : public nsIDragSession {
   // session
   nsContentPolicyType mContentPolicyType = nsIContentPolicy::TYPE_OTHER;
 
+  struct ContentAnalysisDropData {
+    WeakFrame mFrame;
+    RefPtr<nsIContent> mContent;
+    // ContentAnalysisDropData owns this event
+    mozilla::WidgetDragEvent* mEvent = nullptr;
+
+    // Data from a prior call to EndDragSession.
+    struct {
+      // If the widget is set then a call to EndDragSession will have to
+      // be issued after the drop is processed.
+      RefPtr<nsIWidget> mWidget;
+      bool mDoneDrag = false;
+      uint32_t mKeyModifiers = 0;
+    } mEndDragSessionData;
+
+    void Clear();
+    ContentAnalysisDropData& operator=(const ContentAnalysisDropData& o);
+    ~ContentAnalysisDropData();
+  };
+
+  ContentAnalysisDropData mDropData;
+
   uint32_t mDragAction = nsIDragService::DRAGDROP_ACTION_NONE;
   uint32_t mDragActionFromChildProcess =
       nsIDragService::DRAGDROP_ACTION_UNINITIALIZED;
@@ -262,6 +290,16 @@ class nsBaseDragSession : public nsIDragSession {
   bool mEndingSession = false;
   // true if mImage should be used to set a drag image
   bool mHasImage = false;
+
+  ContentAnalysisVerdict mDropEventContentAnalysisVerdict =
+      ContentAnalysisVerdict::eUnknown;
+
+  // The browsing context ID of the browser that was sent a drop event
+  // (if any).
+  mozilla::Maybe<uint64_t> mDropEventRemoteBrowsingContextId;
+
+  // True if dispatch of a drop event was stopped for content analysis.
+  bool mDropRequestedContentAnalysis = false;
 };
 
 /**
