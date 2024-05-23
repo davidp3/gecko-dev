@@ -235,10 +235,6 @@ class ContentAnalysis final : public nsIContentAnalysis {
   // in which case none of that happens).
   static nsresult ConsiderDropEvent(PresShell* aPresShell,
                                     WidgetDragEvent* aEvent, nsIFrame* aFrame);
-  // Makes the DND requests (minus the URL) and stores them for later analysis.
-  static nsresult PrepareForDropEventAnalysisRequest(
-      dom::DataTransfer* aDataTransfer,
-      dom::WindowGlobalParent* aWindowGlobalParent);
 
   // aDlpRequestMadeWasPreviouslySent is used by DND when the
   // dlp-request-made observable was already sent.

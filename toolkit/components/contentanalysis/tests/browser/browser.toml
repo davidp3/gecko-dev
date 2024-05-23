@@ -31,6 +31,12 @@ support-files = [
   "clipboard_read_async.html",
 ]
 
+["browser_content_analysis_dnd.js"]
+support-files = [
+  "browser_content_analysis_dnd_inner.html",
+  "browser_content_analysis_dnd_outer.html",
+]
+
 ["browser_content_analysis_policies.js"]
 
 ["browser_print_changing_page_content_analysis.js"]

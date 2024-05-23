@@ -26,6 +26,7 @@
 #include "nsXULPopupManager.h"
 #include "nsMenuPopupFrame.h"
 #include "nsTreeBodyFrame.h"
+#include "mozilla/Components.h"
 #include "mozilla/MouseEvents.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/PresShell.h"
@@ -1240,9 +1241,12 @@ void nsBaseDragSession::SetDropEventWasForwardedTo(BrowsingContext* aBC) {
     // a complete content analysis request, or it will undo the prep work
     // we do here.
     CanonicalBrowsingContext* cbc = aBC->Canonical();
-    mozilla::contentanalysis::ContentAnalysis::
-        PrepareForDropEventAnalysisRequest(GetDataTransfer(),
-                                           cbc->GetCurrentWindowGlobal());
+    RefPtr<nsIContentAnalysis> ca =
+        mozilla::components::nsIContentAnalysis::Service();
+    if (ca) {
+      ca->PrepareForDropEventAnalysisRequest(GetDataTransfer(),
+                                             cbc->GetCurrentWindowGlobal());
+    }
   }
 }
 

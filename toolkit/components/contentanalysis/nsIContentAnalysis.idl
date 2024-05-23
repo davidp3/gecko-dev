@@ -273,7 +273,19 @@ interface nsIContentAnalysis : nsISupports
    */
   [can_run_script] void analyzeRemoteDropEvent(in BrowsingContext aBC);
 
+  /**
+   * Makes the DND requests (minus the URL) and stores them for later analysis.
+   */
+  void prepareForDropEventAnalysisRequest(in DataTransfer aDataTransfer,
+      in WindowGlobalParent aWindowGlobalParent);
+
   void cancelAllRequestsForDrop(in BrowsingContext aContext);
+
+  /**
+   * Send allow/deny verdict to drag session.
+   */
+  [can_run_script] void sendDragEventVerdict(
+    in BrowsingContext aBC, in boolean aIsRemote, in boolean aWasAllow);
 
   /**
    * Cancels the request that is in progress. This may not actually cancel the request

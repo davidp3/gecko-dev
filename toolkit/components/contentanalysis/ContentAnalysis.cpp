@@ -2109,8 +2109,7 @@ nsresult ContentAnalysis::MakeDropRequests(
   return NS_OK;
 }
 
-/* static */
-nsresult ContentAnalysis::PrepareForDropEventAnalysisRequest(
+NS_IMETHODIMP ContentAnalysis::PrepareForDropEventAnalysisRequest(
     dom::DataTransfer* aDataTransfer,
     dom::WindowGlobalParent* aWindowGlobalParent) {
   MOZ_ASSERT(XRE_IsParentProcess());
@@ -2176,21 +2175,27 @@ size_t ContentAnalysis::DecrementResponseWaitCount(
   return numRemaining;
 }
 
-MOZ_CAN_RUN_SCRIPT static void SendDragEventVerdict(
-    dom::CanonicalBrowsingContext* aCBC, bool aIsRemote, bool aWasAllow) {
+NS_IMETHODIMP ContentAnalysis::SendDragEventVerdict(dom::BrowsingContext* aBC,
+                                                    bool aIsRemote,
+                                                    bool aWasAllow) {
+  MOZ_ASSERT(aBC);
+  auto* cbc = aBC->Canonical();
+  MOZ_ASSERT(cbc);
+
   if (aIsRemote) {
-    dom::ContentParent* cp = aCBC->GetContentParent();
-    NS_ENSURE_TRUE_VOID(cp);
-    Unused << cp->SendContentAnalysisDropResult(aCBC, aWasAllow);
-    return;
+    dom::ContentParent* cp = cbc->GetContentParent();
+    NS_ENSURE_TRUE(cp, NS_ERROR_FAILURE);
+    Unused << cp->SendContentAnalysisDropResult(cbc, aWasAllow);
+    return NS_OK;
   }
 
   // drop was in this process so the session is still set on the widget.
-  RefPtr<nsIWidget> widget = aCBC->GetParentProcessWidgetContaining();
-  NS_ENSURE_TRUE_VOID(widget);
+  RefPtr<nsIWidget> widget = cbc->GetParentProcessWidgetContaining();
+  NS_ENSURE_TRUE(widget, NS_ERROR_FAILURE);
   RefPtr<nsIDragSession> session = widget->GetDragSession();
-  NS_ENSURE_TRUE_VOID(session);
+  NS_ENSURE_TRUE(session, NS_ERROR_FAILURE);
   session->ContentAnalysisDropResult(true);
+  return NS_OK;
 }
 
 void ContentAnalysis::SendDragleaveAndCancelRemaining(uint64_t bcId,
@@ -2347,7 +2352,7 @@ nsresult ContentAnalysis::ConsiderDropEvent(PresShell* aPresShell,
   MOZ_ASSERT(aEvent->mClass == eDragEventClass);
   MOZ_ASSERT(aEvent->mMessage == eDrop);
   // Do nothing unless content analysis is active.
-  RefPtr<ContentAnalysis> ca =
+  RefPtr<nsIContentAnalysis> ca =
       mozilla::components::nsIContentAnalysis::Service();
   bool isActive = false;
   if (NS_WARN_IF(!ca) || NS_FAILED(ca->GetMightBeActive(&isActive)) ||
