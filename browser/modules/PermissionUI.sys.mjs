@@ -252,6 +252,16 @@ class PermissionPrompt {
   }
 
   /**
+   * The hint text to show to the user in the PopupNotification, see
+   * `PopupNotifications_show` in PopupNotifications.sys.mjs.
+   *
+   * @return {string}
+   */
+  get hintText() {
+    return undefined;
+  }
+
+  /**
    * Provides the preferred name to use in the permission popups,
    * based on the principal URI (the URI.hostPort for any URI scheme
    * besides the moz-extension one which should default to the
@@ -616,6 +626,7 @@ class PermissionPrompt {
       return false;
     };
 
+    options.hintText = this.hintText;
     // Post-prompts show up as dismissed.
     options.dismissed = postPrompt;
 
@@ -741,6 +752,16 @@ class GeolocationPermissionPrompt extends PermissionPromptForRequest {
   constructor(request) {
     super();
     this.request = request;
+    let types = request.types.QueryInterface(Ci.nsIArray);
+    let perm = types.queryElementAt(0, Ci.nsIContentPermissionType);
+    // systemWillRequestPermission and needsSystemSetting are mutually
+    // exclusive
+    this.systemWillRequestPermission =
+      !!perm.options.length &&
+      perm.options.queryElementAt(0, Ci.nsISupportsString) == "sysdlg";
+    this.needsSystemSetting =
+      !!perm.options.length &&
+      perm.options.queryElementAt(0, Ci.nsISupportsString) == "syssetting";
   }
 
   get type() {
@@ -807,6 +828,22 @@ class GeolocationPermissionPrompt extends PermissionPromptForRequest {
       "geolocation.shareWithSite4",
       ["<>"]
     );
+  }
+
+  get hintText() {
+    if (this.systemWillRequestPermission) {
+      return lazy.gBrowserBundle.GetStringFromName(
+        "geolocation.system_will_request_permission"
+      );
+    }
+
+    if (this.needsSystemSetting) {
+      return lazy.gBrowserBundle.GetStringFromName(
+        "geolocation.needs_system_setting"
+      );
+    }
+
+    return undefined;
   }
 
   get promptActions() {

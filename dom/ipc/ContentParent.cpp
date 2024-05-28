@@ -102,6 +102,7 @@
 #include "mozilla/dom/FileSystemSecurity.h"
 #include "mozilla/dom/GeolocationBinding.h"
 #include "mozilla/dom/GeolocationPositionError.h"
+#include "mozilla/dom/GeolocationSystem.h"
 #include "mozilla/dom/GetFilesHelper.h"
 #include "mozilla/dom/IPCBlobUtils.h"
 #include "mozilla/dom/JSActorService.h"
@@ -8253,6 +8254,27 @@ IPCResult ContentParent::RecvGetSystemIcon(nsIURI* aURI,
       "This message is currently implemented only on GTK and Windows "
       "platforms");
 #endif
+}
+
+IPCResult ContentParent::RecvGetGeolocationOSPermission(
+    GetGeolocationOSPermissionResolver&& aResolver) {
+  aResolver(Geolocation::GetLocationOSPermission());
+  return IPC_OK();
+}
+
+IPCResult
+ContentParent::RecvReallowGeolocationRequestWithSystemPermissionOrCancel(
+    const MaybeDiscardedBrowsingContext& aBrowsingContext,
+    ReallowGeolocationRequestWithSystemPermissionOrCancelResolver&& aResolver) {
+  if (aBrowsingContext.IsNullOrDiscarded()) {
+    aResolver(Nothing());
+    return IPC_OK();
+  }
+  RefPtr<BrowsingContext> browsingContext = aBrowsingContext.get();
+
+  Geolocation::ReallowWithSystemPermissionOrCancel(browsingContext,
+                                                   std::move(aResolver));
+  return IPC_OK();
 }
 
 #ifdef FUZZING_SNAPSHOT

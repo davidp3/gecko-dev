@@ -74,6 +74,7 @@ include "mozilla/dom/BindingIPCUtils.h";
 include "mozilla/dom/CSPMessageUtils.h";
 include "mozilla/dom/DocShellMessageUtils.h";
 include "mozilla/dom/FeaturePolicyUtils.h";
+include "mozilla/dom/GeolocationIPCUtils.h";
 include "mozilla/dom/MediaSessionIPCUtils.h";
 include "mozilla/dom/PageLoadEventUtils.h";
 include "mozilla/dom/ReferrerInfoUtils.h";
@@ -114,6 +115,7 @@ using mozilla::Telemetry::ScalarAction from "mozilla/TelemetryComms.h";
 using mozilla::Telemetry::KeyedScalarAction from "mozilla/TelemetryComms.h";
 using mozilla::Telemetry::DynamicScalarDefinition from "mozilla/TelemetryComms.h";
 using mozilla::Telemetry::ChildEventData from "mozilla/TelemetryComms.h";
+using mozilla::dom::geolocation::LocationOSPermission from "mozilla/dom/GeolocationIPCUtils.h";
 
 #if defined(XP_WIN)
 [MoveOnly] using mozilla::UntrustedModulesData from "mozilla/UntrustedModulesData.h";
@@ -1961,6 +1963,14 @@ parent:
     // format.  Not supported (or needed) on all platforms; see the
     // implementation in ContentParent::RecvGetSystemIcon for details.
     async GetSystemIcon(nullable nsIURI aURI) returns (nsresult aResult, ByteBuf? aData);
+
+    // Returns the status of the geolocation permission on this system.
+    // May not be accurate if the information is not known.
+    async GetGeolocationOSPermission() returns (LocationOSPermission permission);
+
+    // Opens system geolocation settings and posts a modal dialog dialog
+    // to the tab that requested geolocation.
+    async ReallowGeolocationRequestWithSystemPermissionOrCancel(MaybeDiscardedBrowsingContext aBrowsingContext) returns (uint16_t? aErrorCode);
 
 #ifdef FUZZING_SNAPSHOT
     // Used by the child process to signal that it is ready to start fuzzing.
