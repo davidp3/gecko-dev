@@ -28,9 +28,17 @@ SOURCES += [
 ]
 
 UNIFIED_SOURCES += [
-    "GeolocationSystem.cpp",
     "MLSFallback.cpp",
 ]
+
+if CONFIG["OS_TARGET"] == "WINNT":
+    UNIFIED_SOURCES += [
+        "WinGeolocationSystem.cpp",
+    ]
+else:
+    SOURCES += [
+        "GeolocationSystem.cpp",
+    ]
 
 include("/ipc/chromium/chromium-config.mozbuild")
 
