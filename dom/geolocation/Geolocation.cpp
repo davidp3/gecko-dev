@@ -1486,7 +1486,11 @@ Geolocation::GetLocationOSPermission() {
     return geolocation::LocationOSPermission::eLocationIsPermitted;
   }
 
-  return geolocation::LocationOSPermission::eLocationNotPermitted;
+  if (StaticPrefs::geo_prompt_open_system_prefs()) {
+    return geolocation::LocationOSPermission::eLocationNotPermitted;
+  } else {
+    return geolocation::LocationOSPermission::eLocationIsPermitted;
+  }
 }
 
 void Geolocation::RequestIfPermitted(nsGeolocationRequest* request) {
