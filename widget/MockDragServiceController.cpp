@@ -163,9 +163,6 @@ MockDragServiceController::SendEvent(
   RefPtr<MockDragService> ds = mDragService;
 
   if (aEventType == EventType::eDragEnter) {
-    // We expect StartDragSession to return an "error" when a drag session
-    // already exists, which it will if we are dragging in the same widget,
-    // so we don't check the return value.
     ds->StartDragSession(widget);
   }
 

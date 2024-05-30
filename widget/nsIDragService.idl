@@ -136,9 +136,10 @@ interface nsIDragService : nsISupports
     * Version of startDragSessionFromWindow that takes a widget.
     *
     * @param aWidget         Widget to start the drag over.
+    * @returns the new session
     */
-  [noscript]
-  void startDragSession(in nsIWidgetPtr aWidget);
+  [notxpcom, nostdcall]
+  nsIDragSession startDragSession(in nsIWidgetPtr aWidget);
 
   /**
    * Similar to startDragSession(), automated tests may want to start

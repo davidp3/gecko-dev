@@ -249,7 +249,8 @@ nsNativeDragTarget::DragEnter(LPDATAOBJECT pIDataSource, DWORD grfKeyState,
 
   // tell the drag service about this drag (it may have come from an
   // outside app).
-  mDragService->StartDragSession(mWidget);
+  RefPtr<nsDragSession> session =
+      static_cast<nsDragSession*>(mDragService->StartDragSession(mWidget));
 
   void* tempOutData = nullptr;
   uint32_t tempDataLen = 0;
@@ -265,8 +266,6 @@ nsNativeDragTarget::DragEnter(LPDATAOBJECT pIDataSource, DWORD grfKeyState,
   }
 
   // Set the native data object into drag session
-  RefPtr<nsDragSession> session =
-      static_cast<nsDragSession*>(mWidget->GetDragSession());
   MOZ_ASSERT(session);
   session->SetIDataObject(pIDataSource);
 

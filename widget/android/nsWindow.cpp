@@ -2688,13 +2688,12 @@ void nsWindow::OnDragEvent(int32_t aAction, int64_t aTime, float aX, float aY,
     nsCOMPtr<nsIDragService> dragService =
         do_GetService("@mozilla.org/widget/dragservice;1");
     if (dragService) {
-      dragService->StartDragSession(this);
+      dragSession =
+          static_cast<nsDragSession*>(dragService->StartDragSession(this));
+      MOZ_ASSERT(dragSession);
     }
 
     // For compatibility, we have to set temporary data.
-    dragSession = static_cast<nsDragSession*>(GetDragSession());
-    MOZ_ASSERT(dragSession);
-
     auto dropData =
         mozilla::java::GeckoDragAndDrop::DropData::Ref::From(aDropData);
     dragSession->SetDropData(dropData);

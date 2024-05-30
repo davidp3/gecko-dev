@@ -612,22 +612,21 @@ nsBaseDragService::StartDragSessionFromWindow(mozIDOMWindowProxy* aWinProxy) {
 
   RefPtr<nsGlobalWindowOuter> outerWin = nsGlobalWindowOuter::Cast(aWinProxy);
   RefPtr<nsIWidget> widget = outerWin->GetMainWidget();
-  return StartDragSession(widget);
+  return StartDragSession(widget) ? NS_OK : NS_ERROR_FAILURE;
 }
 
-NS_IMETHODIMP
-nsBaseDragService::StartDragSession(nsIWidget* aWidget) {
+nsIDragSession* nsBaseDragService::StartDragSession(nsIWidget* aWidget) {
   if (!aWidget) {
-    return NS_ERROR_NULL_POINTER;
+    return nullptr;
   }
   RefPtr<nsIDragSession> session = aWidget->GetDragSession();
   if (session) {
-    return NS_OK;
+    return session;
   }
 
   session = CreateDragSession();
   aWidget->SetDragSession(session);
-  return NS_OK;
+  return session;
 }
 
 NS_IMETHODIMP
@@ -647,10 +646,7 @@ NS_IMETHODIMP nsBaseDragService::StartDragSessionForTests(
   RefPtr<nsGlobalWindowOuter> outerWin = nsGlobalWindowOuter::Cast(aWinProxy);
   RefPtr<nsIWidget> widget = outerWin->GetNearestWidget();
   MOZ_ASSERT(widget);
-  nsresult rv = StartDragSession(widget);
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  RefPtr<nsIDragSession> session = widget->GetDragSession();
+  RefPtr<nsIDragSession> session = StartDragSession(widget);
   MOZ_ASSERT(session);
   session->InitForTests(aAllowedEffect);
   return NS_OK;
