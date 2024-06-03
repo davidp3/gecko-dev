@@ -691,7 +691,7 @@ nsBaseDragSession::EndDragSession(nsISupports* aWidgetProvider, bool aDoneDrag,
     if (NS_WARN_IF(!outerWin)) {
       return NS_ERROR_INVALID_ARG;
     }
-    widget = outerWin->GetNearestWidget();
+    widget = outerWin->GetMainWidget();
     if (NS_WARN_IF(!widget)) {
       return NS_ERROR_INVALID_ARG;
     }
