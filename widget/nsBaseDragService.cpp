@@ -589,13 +589,9 @@ nsBaseDragService::GetCurrentSession(mozIDOMWindowProxy* aWindowProxy,
   NS_ENSURE_TRUE(aSession, NS_ERROR_INVALID_ARG);
 
   nsCOMPtr<nsPIDOMWindowInner> winInner;
-  if (aWindowProxy) {
-    auto* window = nsPIDOMWindowOuter::From(aWindowProxy);
-    MOZ_ASSERT(window);
-    winInner = window->GetCurrentInnerWindow();
-  } else {
-    winInner = do_QueryInterface(GetEntryGlobal());
-  }
+  auto* window = nsPIDOMWindowOuter::From(aWindowProxy);
+  MOZ_ASSERT(window);
+  winInner = window->GetCurrentInnerWindow();
   NS_ENSURE_TRUE(winInner, NS_ERROR_FAILURE);
   nsGlobalWindowInner* globalWinInner = nsGlobalWindowInner::Cast(winInner);
   NS_ENSURE_TRUE(globalWinInner, NS_ERROR_FAILURE);
