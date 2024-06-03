@@ -628,6 +628,7 @@ nsIDragSession* nsBaseDragService::StartDragSession(nsIWidget* aWidget) {
 
   session = CreateDragSession();
   aWidget->SetDragSession(session);
+  mBrowsers = aWidget->TakeDragSessionBrowsers();
   return session;
 }
 
