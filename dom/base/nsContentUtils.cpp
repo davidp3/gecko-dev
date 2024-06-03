@@ -6347,10 +6347,9 @@ nsresult nsContentUtils::SetDataTransferInEvent(WidgetDragEvent* aDragEvent) {
       // be created that reflects the data.
       initialDataTransfer =
           new DataTransfer(aDragEvent->mTarget, aDragEvent->mMessage, true, -1);
-
-      // now set it in the drag session so we don't need to create it again
-      targetDragSession->SetDataTransfer(initialDataTransfer);
     }
+    // now set it in the drag session so we don't need to create it again
+    targetDragSession->SetDataTransfer(initialDataTransfer);
   }
 
   bool isCrossDomainSubFrameDrop = false;

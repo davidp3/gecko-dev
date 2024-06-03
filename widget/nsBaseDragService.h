@@ -106,6 +106,8 @@ class nsBaseDragSession : public nsIDragSession {
   // being involved in this drag session.
   void TakeDragSessionBrowsers(nsIWidget::WeakBrowserArray&& aBrowsers);
 
+  void SetSourceNode(nsINode* aSourceNode);
+
  protected:
   virtual ~nsBaseDragSession();
 
@@ -318,10 +320,27 @@ class nsBaseDragService : public nsIDragService {
 
   NS_DECL_NSIDRAGSERVICE
 
+  void ClearCurrentSourceNode();
+
  protected:
   virtual ~nsBaseDragService();
 
   virtual already_AddRefed<nsIDragSession> CreateDragSession() = 0;
+
+  // This is the last remaining hack from the time when nsIDragService
+  // and nsIDragSession were the same singleton object.  In the
+  // parent process, when one Gecko widget is the source of the drag
+  // and a different widget is becoming its current target, this is used to
+  // set the second widget's drag session's sourceNode to be the node
+  // from the first one.  In all other ways, the two sessions are
+  // be completely distinct.  This allows us to use the first one to
+  // populate the DataTransfer for the second one in
+  // nsContentUtils::SetDataTransferInEvent.  This hack is not strictly
+  // necessary -- tab dragging could rely on normal external dataTransfer
+  // behavior according to the spec, but it hasn't had to.  The main (sole?)
+  // issue preventing that is that our tab dragging MIME data is not yet
+  // understood or handled that way, so we do this.
+  nsCOMPtr<nsINode> mCurrentSourceNode;
 
   RefPtr<mozilla::test::MockDragServiceController> mMockController;
 

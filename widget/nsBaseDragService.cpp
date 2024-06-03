@@ -192,7 +192,9 @@ void nsBaseDragSession::UpdateSource(nsINode* aNewSourceNode,
   MOZ_ASSERT(mSourceNode->IsInNativeAnonymousSubtree() ||
              aNewSourceNode->IsInNativeAnonymousSubtree());
   MOZ_ASSERT(mSourceDocument == aNewSourceNode->OwnerDoc());
-  mSourceNode = aNewSourceNode;
+
+  SetSourceNode(aNewSourceNode);
+
   // Don't set mSelection if the session was invoked without selection or
   // making it becomes nullptr.  The latter occurs when the old frame is
   // being destroyed.
@@ -316,7 +318,6 @@ nsresult nsBaseDragSession::InvokeDragSession(
   mSourceDocument = aDOMNode->OwnerDoc();
   mTriggeringPrincipal = aPrincipal;
   mCsp = aCsp;
-  mSourceNode = aDOMNode;
   mIsDraggingTextInTextControl =
       mSourceNode->IsInNativeAnonymousSubtree() &&
       TextControlElement::FromNodeOrNull(
@@ -421,10 +422,15 @@ nsBaseDragService::InvokeDragSessionWithImage(
   bool isSynthesized =
       aDragEvent->WidgetEventPtr()->mFlags.mIsSynthesizedForTests &&
       !NeverAllowSessionIsSynthesizedForTests();
-  return session->InitWithImage(widget, aDOMNode, aPrincipal, aCsp,
+  nsresult rv = session->InitWithImage(widget, aDOMNode, aPrincipal, aCsp,
                                 aCookieJarSettings, aTransferableArray,
                                 aActionType, aImage, aImageX, aImageY,
                                 aDragEvent, aDataTransfer, isSynthesized);
+  if (NS_SUCCEEDED(rv) && XRE_IsParentProcess()) {
+    MOZ_ASSERT(!mCurrentSourceNode);
+    mCurrentSourceNode = aDOMNode;
+  }
+  return rv;
 }
 
 nsresult nsBaseDragSession::InitWithImage(
@@ -441,10 +447,7 @@ nsresult nsBaseDragSession::InitWithImage(
   mImage = aImage;
   mImageOffset = CSSIntPoint(aImageX, aImageY);
   mDragStartData = nullptr;
-  mSourceWindowContext =
-      aDOMNode ? aDOMNode->OwnerDoc()->GetWindowContext() : nullptr;
-  mSourceTopWindowContext =
-      mSourceWindowContext ? mSourceWindowContext->TopWindowContext() : nullptr;
+  SetSourceNode(aDOMNode);
 
   mScreenPosition = aDragEvent->ScreenPoint(CallerType::System);
   mInputSource = aDragEvent->InputSource(CallerType::System);
@@ -492,10 +495,15 @@ nsBaseDragService::InvokeDragSessionWithRemoteImage(
   bool isSynthesized =
       aDragEvent->WidgetEventPtr()->mFlags.mIsSynthesizedForTests &&
       !NeverAllowSessionIsSynthesizedForTests();
-  return session->InitWithRemoteImage(widget, aDOMNode, aPrincipal, aCsp,
+  nsresult rv = session->InitWithRemoteImage(widget, aDOMNode, aPrincipal, aCsp,
                                       aCookieJarSettings, aTransferableArray,
                                       aActionType, aDragStartData, aDragEvent,
                                       aDataTransfer, isSynthesized);
+  if (NS_SUCCEEDED(rv) && XRE_IsParentProcess()) {
+    MOZ_ASSERT(!mCurrentSourceNode);
+    mCurrentSourceNode = aDOMNode;
+  }
+  return rv;
 }
 
 nsresult nsBaseDragSession::InitWithRemoteImage(
@@ -512,6 +520,7 @@ nsresult nsBaseDragSession::InitWithRemoteImage(
   mImage = nullptr;
   mDragStartData = aDragStartData;
   mImageOffset = CSSIntPoint(0, 0);
+  mSourceNode = aDOMNode;
   mSourceWindowContext = mDragStartData->GetSourceWindowContext();
   mSourceTopWindowContext = mDragStartData->GetSourceTopWindowContext();
 
@@ -544,10 +553,15 @@ nsBaseDragService::InvokeDragSessionWithSelection(
   bool isSynthesized =
       aDragEvent->WidgetEventPtr()->mFlags.mIsSynthesizedForTests &&
       !NeverAllowSessionIsSynthesizedForTests();
-  return session->InitWithSelection(widget, aSelection, aPrincipal, aCsp,
+  nsresult rv = session->InitWithSelection(widget, aSelection, aPrincipal, aCsp,
                                     aCookieJarSettings, aTransferableArray,
                                     aActionType, aDragEvent, aDataTransfer,
                                     isSynthesized);
+  if (NS_SUCCEEDED(rv) && XRE_IsParentProcess()) {
+    MOZ_ASSERT(!mCurrentSourceNode);
+    mCurrentSourceNode = aSelection->GetFocusNode();
+  }
+  return rv;
 }
 
 nsresult nsBaseDragSession::InitWithSelection(
@@ -573,9 +587,7 @@ nsresult nsBaseDragSession::InitWithSelection(
   // XXXndeakin this should actually be the deepest node that contains both
   // endpoints of the selection
   nsCOMPtr<nsINode> node = aSelection->GetFocusNode();
-  mSourceWindowContext = node ? node->OwnerDoc()->GetWindowContext() : nullptr;
-  mSourceTopWindowContext =
-      mSourceWindowContext ? mSourceWindowContext->TopWindowContext() : nullptr;
+  SetSourceNode(node);
 
   return InvokeDragSession(aWidget, node, aPrincipal, aCsp, aCookieJarSettings,
                            aTransferableArray, aActionType,
@@ -622,6 +634,10 @@ nsIDragSession* nsBaseDragService::StartDragSession(nsIWidget* aWidget) {
   }
 
   session = CreateDragSession();
+  if (mCurrentSourceNode) {
+    MOZ_ASSERT(XRE_IsParentProcess());
+    static_cast<nsBaseDragSession*>(session.get())->SetSourceNode(mCurrentSourceNode);
+  }
   aWidget->SetDragSession(session);
   return session;
 }
@@ -748,11 +764,17 @@ nsresult nsBaseDragSession::EndDragSessionImpl(nsIWidget* aWidget,
   }
   mBrowsers.Clear();
 
-  // mDataTransfer and the items it owns are going to die anyway, but we
-  // explicitly deref the contained data here so that we don't have to wait for
-  // CC to reclaim the memory.
   if (XRE_IsParentProcess()) {
+    // mDataTransfer and the items it owns are going to die anyway, but we
+    // explicitly deref the contained data here so that we don't have to wait for
+    // CC to reclaim the memory.
     DiscardInternalTransferData();
+
+    nsCOMPtr<nsIDragService> dragService =
+        do_GetService("@mozilla.org/widget/dragservice;1");
+    if (dragService) {
+      static_cast<nsBaseDragService*>(dragService.get())->ClearCurrentSourceNode();
+    }
   }
 
   mDoingDrag = false;
@@ -1318,4 +1340,18 @@ void nsBaseDragSession::ContentAnalysisDropResult(bool aWasAllow) {
                    mDropData.mEndDragSessionData.mKeyModifiers);
   }
   mDropData.Clear();
+}
+
+void nsBaseDragSession::SetSourceNode(nsINode* aSourceNode) {
+  // Must only be used once, during session initialization.
+  MOZ_ASSERT(!mSourceNode);
+  mSourceNode = aSourceNode;
+  mSourceWindowContext =
+      aSourceNode ? aSourceNode->OwnerDoc()->GetWindowContext() : nullptr;
+  mSourceTopWindowContext =
+      mSourceWindowContext ? mSourceWindowContext->TopWindowContext() : nullptr;
+}
+
+void nsBaseDragService::ClearCurrentSourceNode() {
+  mCurrentSourceNode = nullptr;
 }
