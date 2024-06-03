@@ -424,6 +424,7 @@ nsresult nsWindowWatcher::CreateChromeWindow(nsIWebBrowserChrome* aParentChrome,
     return NS_ERROR_UNEXPECTED;
   }
 
+#if 0
 #ifdef XP_WIN
   if (aChromeFlags & nsIWebBrowserChrome::CHROME_OPENAS_DIALOG) {
     // On Windows, if there are any drag and drop operations in flight,
@@ -434,6 +435,7 @@ nsresult nsWindowWatcher::CreateChromeWindow(nsIWebBrowserChrome* aParentChrome,
       ds->EndAllDragSessions(true, 0);
     }
   }
+#endif
 #endif
 
   bool cancel = false;
