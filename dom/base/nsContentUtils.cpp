@@ -6319,25 +6319,43 @@ nsresult nsContentUtils::SetDataTransferInEvent(WidgetDragEvent* aDragEvent) {
 
   MOZ_ASSERT(aDragEvent->mWidget);
   NS_ENSURE_TRUE(aDragEvent->mWidget, NS_ERROR_NULL_POINTER);
-  nsCOMPtr<nsIDragSession> dragSession = aDragEvent->mWidget->GetDragSession();
-  NS_ENSURE_TRUE(dragSession, NS_OK);  // no drag in progress
+  nsCOMPtr<nsIDragSession> targetDragSession =
+      aDragEvent->mWidget->GetDragSession();
+  NS_ENSURE_TRUE(targetDragSession, NS_OK);  // no drag in progress
 
-  RefPtr<DataTransfer> initialDataTransfer = dragSession->GetDataTransfer();
+  // If the drag session for our event, which targets the target widget
+  // of the drag, has a sourceNode then we should be able to get the
+  // drag session of the widget that the sourceNode is on.  They may be
+  // the same widget.  Regardless, for this case, we want to get the data
+  // transfer from that source widget's session.
+  DataTransfer* initialDataTransfer = targetDragSession->GetDataTransfer();
   if (!initialDataTransfer) {
-    // A dataTransfer won't exist when a drag was started by some other
-    // means, for instance calling the drag service directly, or a drag
-    // from another application. In either case, a new dataTransfer should
-    // be created that reflects the data.
-    initialDataTransfer =
-        new DataTransfer(aDragEvent->mTarget, aDragEvent->mMessage, true, -1);
+    nsCOMPtr<nsINode> sourceNode;
+    targetDragSession->GetSourceNode(getter_AddRefs(sourceNode));
+    if (sourceNode) {
+      nsCOMPtr<Document> doc = sourceNode->OwnerDoc();
+      auto* ps = doc->GetPresShell();
+      auto* pc = ps ? ps->GetPresContext() : nullptr;
+      auto* widget = pc ? pc->GetRootWidget() : nullptr;
+      auto* sourceDragSession = widget ? widget->GetDragSession() : nullptr;
+      initialDataTransfer = sourceDragSession ? sourceDragSession->GetDataTransfer() : nullptr;
+    }
+    if (!initialDataTransfer) {
+      // A dataTransfer won't exist when a drag was started by some other
+      // means, for instance calling the drag service directly, or a drag
+      // from another application. In either case, a new dataTransfer should
+      // be created that reflects the data.
+      initialDataTransfer =
+          new DataTransfer(aDragEvent->mTarget, aDragEvent->mMessage, true, -1);
 
-    // now set it in the drag session so we don't need to create it again
-    dragSession->SetDataTransfer(initialDataTransfer);
+      // now set it in the drag session so we don't need to create it again
+      targetDragSession->SetDataTransfer(initialDataTransfer);
+    }
   }
 
   bool isCrossDomainSubFrameDrop = false;
   if (aDragEvent->mMessage == eDrop) {
-    isCrossDomainSubFrameDrop = CheckForSubFrameDrop(dragSession, aDragEvent);
+    isCrossDomainSubFrameDrop = CheckForSubFrameDrop(targetDragSession, aDragEvent);
   }
 
   // each event should use a clone of the original dataTransfer.
@@ -6353,7 +6371,7 @@ nsresult nsContentUtils::SetDataTransferInEvent(WidgetDragEvent* aDragEvent) {
   // the event is fired based on the keyboard state.
   if (aDragEvent->mMessage == eDragEnter || aDragEvent->mMessage == eDragOver) {
     uint32_t action;
-    dragSession->GetDragAction(&action);
+    targetDragSession->GetDragAction(&action);
     uint32_t effectAllowed = aDragEvent->mDataTransfer->EffectAllowedInt();
     aDragEvent->mDataTransfer->SetDropEffectInt(
         FilterDropEffect(action, effectAllowed));
