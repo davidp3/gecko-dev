@@ -1540,8 +1540,14 @@ nsIWidget* DataTransfer::GetOwnerWidget() {
   RefPtr<WindowContext> wc = GetWindowContext();
   MOZ_ASSERT(wc);
   auto* doc = wc->GetDocument();
-  auto* pc = doc ? doc->GetPresContext() : nullptr;
-  return pc ? pc->GetRootWidget() : nullptr;
+  if (NS_WARN_IF(!doc)) {
+    return nullptr;
+  }
+  auto* pc = doc->GetPresContext();
+  if (NS_WARN_IF(!pc)) {
+    return nullptr;
+  }
+  return pc->GetRootWidget();
 }
 
 nsIDragSession* DataTransfer::GetOwnerDragSession() {
