@@ -600,7 +600,7 @@ nsBaseDragService::GetCurrentSession(mozIDOMWindowProxy* aWindowProxy,
   NS_ENSURE_TRUE(winInner, NS_ERROR_FAILURE);
   nsGlobalWindowInner* globalWinInner = nsGlobalWindowInner::Cast(winInner);
   NS_ENSURE_TRUE(globalWinInner, NS_ERROR_FAILURE);
-  nsIWidget* widget = globalWinInner->GetNearestWidget();
+  RefPtr<nsIWidget> widget = globalWinInner->GetMainWidget();
   NS_ENSURE_TRUE(widget, NS_ERROR_FAILURE);
   RefPtr<nsIDragSession> session = widget->GetDragSession();
   session.forget(aSession);
