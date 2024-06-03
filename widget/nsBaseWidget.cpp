@@ -2517,7 +2517,11 @@ nsIDragSession* nsIWidget::GetDragSession() {
 void nsIWidget::SetDragSession(nsIDragSession* aSession) {
   MOZ_ASSERT(!mDragSession || !aSession);
   mDragSession = aSession;
-}
+  if (mDragSession && !mBrowsers.IsEmpty()) {
+    auto* bds = static_cast<nsBaseDragSession*>(mDragSession.get());
+    bds->TakeDragSessionBrowsers(std::move(mBrowsers));
+  }
+ }
 
 void nsIWidget::SuppressDragging() {
   RefPtr<nsIDragSession> session = GetDragSession();

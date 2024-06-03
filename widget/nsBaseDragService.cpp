@@ -323,7 +323,6 @@ nsresult nsBaseDragSession::InvokeDragSession(
           mSourceNode->GetClosestNativeAnonymousSubtreeRootParentOrHost());
   mContentPolicyType = aContentPolicyType;
   mEndDragPoint = LayoutDeviceIntPoint(0, 0);
-  mBrowsers = aWidget->TakeDragSessionBrowsers();
 
   // When the mouse goes down, the selection code starts a mouse
   // capture. However, this gets in the way of determining drag
@@ -628,7 +627,6 @@ nsIDragSession* nsBaseDragService::StartDragSession(nsIWidget* aWidget) {
 
   session = CreateDragSession();
   aWidget->SetDragSession(session);
-  mBrowsers = aWidget->TakeDragSessionBrowsers();
   return session;
 }
 
@@ -1172,6 +1170,11 @@ bool nsBaseDragSession::RemoveAllBrowsers() {
 
   mBrowsers.Clear();
   return true;
+}
+
+void nsBaseDragSession::TakeDragSessionBrowsers(
+    nsIWidget::WeakBrowserArray&& aBrowsers) {
+  mBrowsers = std::move(aBrowsers);
 }
 
 bool nsBaseDragSession::MustUpdateDataTransfer(EventMessage aMessage) {

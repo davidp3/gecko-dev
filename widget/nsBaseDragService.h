@@ -102,6 +102,10 @@ class nsBaseDragSession : public nsIDragSession {
       int32_t aImageX, int32_t aImageY, mozilla::dom::DragEvent* aDragEvent,
       mozilla::dom::DataTransfer* aDataTransfer, bool aIsSynthesizedForTests);
 
+  // Adopt the given list of browsers as the browsers currently reporting
+  // being involved in this drag session.
+  void TakeDragSessionBrowsers(nsIWidget::WeakBrowserArray&& aBrowsers);
+
  protected:
   virtual ~nsBaseDragSession();
 
