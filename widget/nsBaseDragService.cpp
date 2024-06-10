@@ -421,10 +421,14 @@ nsBaseDragService::InvokeDragSessionWithImage(
   bool isSynthesized =
       aDragEvent->WidgetEventPtr()->mFlags.mIsSynthesizedForTests &&
       !NeverAllowSessionIsSynthesizedForTests();
-  return session->InitWithImage(widget, aDOMNode, aPrincipal, aCsp,
+  nsresult rv = session->InitWithImage(widget, aDOMNode, aPrincipal, aCsp,
                                 aCookieJarSettings, aTransferableArray,
                                 aActionType, aImage, aImageX, aImageY,
                                 aDragEvent, aDataTransfer, isSynthesized);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  mCurrentParentSourceDataTransfer = aDataTransfer;
+  return NS_OK;
 }
 
 nsresult nsBaseDragSession::InitWithImage(
@@ -492,10 +496,14 @@ nsBaseDragService::InvokeDragSessionWithRemoteImage(
   bool isSynthesized =
       aDragEvent->WidgetEventPtr()->mFlags.mIsSynthesizedForTests &&
       !NeverAllowSessionIsSynthesizedForTests();
-  return session->InitWithRemoteImage(widget, aDOMNode, aPrincipal, aCsp,
+  nsresult rv = session->InitWithRemoteImage(widget, aDOMNode, aPrincipal, aCsp,
                                       aCookieJarSettings, aTransferableArray,
                                       aActionType, aDragStartData, aDragEvent,
                                       aDataTransfer, isSynthesized);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  mCurrentParentSourceDataTransfer = aDataTransfer;
+  return NS_OK;
 }
 
 nsresult nsBaseDragSession::InitWithRemoteImage(
@@ -544,10 +552,14 @@ nsBaseDragService::InvokeDragSessionWithSelection(
   bool isSynthesized =
       aDragEvent->WidgetEventPtr()->mFlags.mIsSynthesizedForTests &&
       !NeverAllowSessionIsSynthesizedForTests();
-  return session->InitWithSelection(widget, aSelection, aPrincipal, aCsp,
+  nsresult rv = session->InitWithSelection(widget, aSelection, aPrincipal, aCsp,
                                     aCookieJarSettings, aTransferableArray,
                                     aActionType, aDragEvent, aDataTransfer,
                                     isSynthesized);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  mCurrentParentSourceDataTransfer = aDataTransfer;
+  return NS_OK;
 }
 
 nsresult nsBaseDragSession::InitWithSelection(
@@ -623,6 +635,15 @@ nsIDragSession* nsBaseDragService::StartDragSession(nsIWidget* aWidget) {
 
   session = CreateDragSession();
   aWidget->SetDragSession(session);
+
+  // If we are in the parent process, use mCurrentParentSourceDataTransfer
+  // as data transfer, if it exists, which it will if and only if the drag
+  // was started by us.
+  MOZ_ASSERT(XRE_IsParentProcess() || !mCurrentParentSourceDataTransfer);
+  if (session && mCurrentParentSourceDataTransfer) {
+    session->SetDataTransfer(mCurrentParentSourceDataTransfer);
+  }
+
   return session;
 }
 
@@ -673,10 +694,26 @@ int32_t nsBaseDragSession::TakeChildProcessDragAction() {
   return retval;
 }
 
+void nsBaseDragService::ClearParentProcessSessionCache() {
+  MOZ_ASSERT(XRE_IsParentProcess() || !mCurrentParentSourceDataTransfer);
+  mCurrentParentSourceDataTransfer = nullptr;
+}
+
 //-------------------------------------------------------------------------
 NS_IMETHODIMP
 nsBaseDragSession::EndDragSession(nsISupports* aWidgetProvider, bool aDoneDrag,
                                   uint32_t aKeyModifiers) {
+  if (!mClearedSessionCache) {
+    // Tell the service to release any cached data.  The session end may be
+    // delayed but the service cache objects are no longer valid.
+    nsCOMPtr<nsIDragService> svc =
+        do_GetService("@mozilla.org/widget/dragservice;1");
+    if (svc) {
+      svc->ClearParentProcessSessionCache();
+      mClearedSessionCache = true;
+    }
+  }
+
   nsCOMPtr<nsIWidget> widget = do_QueryObject(aWidgetProvider);
   if (!widget) {
     nsCOMPtr<mozIDOMWindow> window = do_GetInterface(aWidgetProvider);

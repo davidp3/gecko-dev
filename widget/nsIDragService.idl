@@ -158,6 +158,15 @@ interface nsIDragService : nsISupports
                                 in unsigned long aAllowedEffect);
 
   /**
+   * Called when a session in the parent process is ready to end.  This
+   * gives Gecko a chance to clear data held during the drag session that
+   * is used to share transferred data without doing an actual data
+   * transfer.
+   */
+  [notxpcom, nostdcall]
+  void clearParentProcessSessionCache();
+
+  /**
    * Terminate any running drag sessions.  This method is only available
    * on Windows.
    *

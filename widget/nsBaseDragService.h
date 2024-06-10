@@ -304,6 +304,10 @@ class nsBaseDragSession : public nsIDragSession {
 
   // True if dispatch of a drop event was stopped for content analysis.
   bool mDropRequestedContentAnalysis = false;
+
+  // True if the "session cache" in the nsBaseDragService is cleared.
+  // Only relevant in the parent process.
+  bool mClearedSessionCache = false;
 };
 
 /**
@@ -324,6 +328,14 @@ class nsBaseDragService : public nsIDragService {
   virtual already_AddRefed<nsIDragSession> CreateDragSession() = 0;
 
   RefPtr<mozilla::test::MockDragServiceController> mMockController;
+
+  // In the parent process, if we have a current drag session whose source is
+  // our process, we clone the source data transfer directly into new
+  // target drag sessions (that will be over different widgets).  This is
+  // because parent process drags, like tab dragging, aren't currently
+  // properly configured to work as remote DataTransfers.  In this case,
+  // this member is the source data transfer, otherwise it is null.
+  RefPtr<mozilla::dom::DataTransfer> mCurrentParentSourceDataTransfer;
 
   // If this is set, mSessionIsSynthesizedForTests should not become true.
   // This hack is used to bypass the "old" drag-drop test behavior.

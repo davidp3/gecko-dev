@@ -6330,6 +6330,7 @@ nsresult nsContentUtils::SetDataTransferInEvent(WidgetDragEvent* aDragEvent) {
   // transfer from that source widget's session.
   DataTransfer* initialDataTransfer = targetDragSession->GetDataTransfer();
   if (!initialDataTransfer) {
+/*
     nsCOMPtr<nsINode> sourceNode;
     targetDragSession->GetSourceNode(getter_AddRefs(sourceNode));
     if (sourceNode) {
@@ -6341,6 +6342,7 @@ nsresult nsContentUtils::SetDataTransferInEvent(WidgetDragEvent* aDragEvent) {
       initialDataTransfer = sourceDragSession ? sourceDragSession->GetDataTransfer() : nullptr;
     }
     if (!initialDataTransfer) {
+*/
       // A dataTransfer won't exist when a drag was started by some other
       // means, for instance calling the drag service directly, or a drag
       // from another application. In either case, a new dataTransfer should
@@ -6350,7 +6352,7 @@ nsresult nsContentUtils::SetDataTransferInEvent(WidgetDragEvent* aDragEvent) {
 
       // now set it in the drag session so we don't need to create it again
       targetDragSession->SetDataTransfer(initialDataTransfer);
-    }
+//    }
   }
 
   bool isCrossDomainSubFrameDrop = false;
