@@ -6339,6 +6339,14 @@ nsresult nsContentUtils::SetDataTransferInEvent(WidgetDragEvent* aDragEvent) {
       auto* widget = pc ? pc->GetRootWidget() : nullptr;
       auto* sourceDragSession = widget ? widget->GetDragSession() : nullptr;
       initialDataTransfer = sourceDragSession ? sourceDragSession->GetDataTransfer() : nullptr;
+      if (initialDataTransfer) {
+        // now set it in the drag session so we don't need to create it again
+        RefPtr<DataTransfer> cloneDT;
+        initialDataTransfer->Clone(
+          aDragEvent->mTarget, aDragEvent->mMessage, aDragEvent->mUserCancelled,
+          false /* isCrossDomainSubframeDrop */, getter_AddRefs(cloneDT));
+        targetDragSession->SetDataTransfer(cloneDT);
+      }
     }
     if (!initialDataTransfer) {
       // A dataTransfer won't exist when a drag was started by some other
@@ -6347,9 +6355,9 @@ nsresult nsContentUtils::SetDataTransferInEvent(WidgetDragEvent* aDragEvent) {
       // be created that reflects the data.
       initialDataTransfer =
           new DataTransfer(aDragEvent->mTarget, aDragEvent->mMessage, true, -1);
+      // now set it in the drag session so we don't need to create it again
+      targetDragSession->SetDataTransfer(initialDataTransfer);
     }
-    // now set it in the drag session so we don't need to create it again
-    targetDragSession->SetDataTransfer(initialDataTransfer);
   }
 
   bool isCrossDomainSubFrameDrop = false;

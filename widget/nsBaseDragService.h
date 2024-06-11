@@ -341,6 +341,7 @@ class nsBaseDragService : public nsIDragService {
   // issue preventing that is that our tab dragging MIME data is not yet
   // understood or handled that way, so we do this.
   nsCOMPtr<nsINode> mCurrentSourceNode;
+  RefPtr<nsIDragSession> mCurrentDragSession;
 
   RefPtr<mozilla::test::MockDragServiceController> mMockController;
 

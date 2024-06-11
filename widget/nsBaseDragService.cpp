@@ -429,6 +429,7 @@ nsBaseDragService::InvokeDragSessionWithImage(
   if (NS_SUCCEEDED(rv) && XRE_IsParentProcess()) {
     MOZ_ASSERT(!mCurrentSourceNode);
     mCurrentSourceNode = aDOMNode;
+    mCurrentDragSession = session;
   }
   return rv;
 }
@@ -502,6 +503,7 @@ nsBaseDragService::InvokeDragSessionWithRemoteImage(
   if (NS_SUCCEEDED(rv) && XRE_IsParentProcess()) {
     MOZ_ASSERT(!mCurrentSourceNode);
     mCurrentSourceNode = aDOMNode;
+    mCurrentDragSession = session;
   }
   return rv;
 }
@@ -560,6 +562,7 @@ nsBaseDragService::InvokeDragSessionWithSelection(
   if (NS_SUCCEEDED(rv) && XRE_IsParentProcess()) {
     MOZ_ASSERT(!mCurrentSourceNode);
     mCurrentSourceNode = aSelection->GetFocusNode();
+    mCurrentDragSession = session;
   }
   return rv;
 }
@@ -633,11 +636,14 @@ nsIDragSession* nsBaseDragService::StartDragSession(nsIWidget* aWidget) {
     return session;
   }
 
-  session = CreateDragSession();
-  if (mCurrentSourceNode) {
-    MOZ_ASSERT(XRE_IsParentProcess());
-    static_cast<nsBaseDragSession*>(session.get())->SetSourceNode(mCurrentSourceNode);
+  session = mCurrentDragSession;
+  if (XRE_IsParentProcess() && !session) {
+    session = CreateDragSession();
   }
+//  if (mCurrentSourceNode) {
+//    MOZ_ASSERT(XRE_IsParentProcess());
+//    static_cast<nsBaseDragSession*>(session.get())->SetSourceNode(mCurrentSourceNode);
+//  }
   aWidget->SetDragSession(session);
   return session;
 }
@@ -693,6 +699,15 @@ int32_t nsBaseDragSession::TakeChildProcessDragAction() {
 NS_IMETHODIMP
 nsBaseDragSession::EndDragSession(nsISupports* aWidgetProvider, bool aDoneDrag,
                                   uint32_t aKeyModifiers) {
+  if (XRE_IsParentProcess()) {
+    nsCOMPtr<nsIDragService> dragService =
+        do_GetService("@mozilla.org/widget/dragservice;1");
+    if (dragService) {
+      static_cast<nsBaseDragService*>(dragService.get())
+          ->ClearCurrentSourceNode();
+    }
+  }
+
   nsCOMPtr<nsIWidget> widget = do_QueryObject(aWidgetProvider);
   if (!widget) {
     nsCOMPtr<mozIDOMWindow> window = do_GetInterface(aWidgetProvider);
@@ -769,12 +784,6 @@ nsresult nsBaseDragSession::EndDragSessionImpl(nsIWidget* aWidget,
     // explicitly deref the contained data here so that we don't have to wait for
     // CC to reclaim the memory.
     DiscardInternalTransferData();
-
-    nsCOMPtr<nsIDragService> dragService =
-        do_GetService("@mozilla.org/widget/dragservice;1");
-    if (dragService) {
-      static_cast<nsBaseDragService*>(dragService.get())->ClearCurrentSourceNode();
-    }
   }
 
   mDoingDrag = false;
@@ -1346,12 +1355,14 @@ void nsBaseDragSession::SetSourceNode(nsINode* aSourceNode) {
   // Must only be used once, during session initialization.
   MOZ_ASSERT(!mSourceNode);
   mSourceNode = aSourceNode;
+  mSourceDocument = aSourceNode ? aSourceNode->OwnerDoc() : nullptr;
   mSourceWindowContext =
-      aSourceNode ? aSourceNode->OwnerDoc()->GetWindowContext() : nullptr;
+      mSourceDocument ? mSourceDocument->GetWindowContext() : nullptr;
   mSourceTopWindowContext =
       mSourceWindowContext ? mSourceWindowContext->TopWindowContext() : nullptr;
 }
 
 void nsBaseDragService::ClearCurrentSourceNode() {
   mCurrentSourceNode = nullptr;
+  mCurrentDragSession = nullptr;
 }
