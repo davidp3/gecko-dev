@@ -2013,9 +2013,9 @@ mozilla::ipc::IPCResult BrowserChild::RecvEndDragSession(
         dataTransfer->SetDropEffectInt(aDropEffect);
       }
       dragSession->SetDragEndPoint(aDragEndPoint.x, aDragEndPoint.y);
+      RefPtr<nsIWidget> widget = WebWidget();
+      dragSession->EndDragSession(widget, aDoneDrag, aKeyModifiers);
     }
-    RefPtr<nsIWidget> widget = WebWidget();
-    dragSession->EndDragSession(widget, aDoneDrag, aKeyModifiers);
   }
   return IPC_OK();
 }
