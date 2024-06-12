@@ -422,14 +422,21 @@ nsBaseDragService::InvokeDragSessionWithImage(
   bool isSynthesized =
       aDragEvent->WidgetEventPtr()->mFlags.mIsSynthesizedForTests &&
       !NeverAllowSessionIsSynthesizedForTests();
+  if (XRE_IsParentProcess()) {
+    MOZ_ASSERT(!mCurrentSourceNode);
+//    mCurrentSourceNode = aDOMNode;
+    mCurrentDragSession = session;
+//    mCurrentDataTransfer = aDataTransfer;
+  }
   nsresult rv = session->InitWithImage(widget, aDOMNode, aPrincipal, aCsp,
                                 aCookieJarSettings, aTransferableArray,
                                 aActionType, aImage, aImageX, aImageY,
                                 aDragEvent, aDataTransfer, isSynthesized);
-  if (NS_SUCCEEDED(rv) && XRE_IsParentProcess()) {
-    MOZ_ASSERT(!mCurrentSourceNode);
-    mCurrentSourceNode = aDOMNode;
-    mCurrentDragSession = session;
+  if (!NS_SUCCEEDED(rv) && XRE_IsParentProcess()) {
+//    MOZ_ASSERT(mCurrentSourceNode == aDOMNode);
+    mCurrentSourceNode = nullptr;
+    mCurrentDragSession = nullptr;
+    mCurrentDataTransfer = nullptr;
   }
   return rv;
 }
@@ -496,14 +503,21 @@ nsBaseDragService::InvokeDragSessionWithRemoteImage(
   bool isSynthesized =
       aDragEvent->WidgetEventPtr()->mFlags.mIsSynthesizedForTests &&
       !NeverAllowSessionIsSynthesizedForTests();
+  if (XRE_IsParentProcess()) {
+    MOZ_ASSERT(!mCurrentSourceNode);
+//    mCurrentSourceNode = aDOMNode;
+    mCurrentDragSession = session;
+//    mCurrentDataTransfer = aDataTransfer;
+  }
   nsresult rv = session->InitWithRemoteImage(widget, aDOMNode, aPrincipal, aCsp,
                                       aCookieJarSettings, aTransferableArray,
                                       aActionType, aDragStartData, aDragEvent,
                                       aDataTransfer, isSynthesized);
-  if (NS_SUCCEEDED(rv) && XRE_IsParentProcess()) {
-    MOZ_ASSERT(!mCurrentSourceNode);
-    mCurrentSourceNode = aDOMNode;
-    mCurrentDragSession = session;
+  if (!NS_SUCCEEDED(rv) && XRE_IsParentProcess()) {
+//    MOZ_ASSERT(mCurrentSourceNode == aDOMNode);
+    mCurrentSourceNode = nullptr;
+    mCurrentDragSession = nullptr;
+    mCurrentDataTransfer = nullptr;
   }
   return rv;
 }
@@ -555,14 +569,21 @@ nsBaseDragService::InvokeDragSessionWithSelection(
   bool isSynthesized =
       aDragEvent->WidgetEventPtr()->mFlags.mIsSynthesizedForTests &&
       !NeverAllowSessionIsSynthesizedForTests();
+  if (XRE_IsParentProcess()) {
+    MOZ_ASSERT(!mCurrentSourceNode);
+//    mCurrentSourceNode = aSelection->GetFocusNode();
+    mCurrentDragSession = session;
+//    mCurrentDataTransfer = aDataTransfer;
+  }
   nsresult rv = session->InitWithSelection(widget, aSelection, aPrincipal, aCsp,
                                     aCookieJarSettings, aTransferableArray,
                                     aActionType, aDragEvent, aDataTransfer,
                                     isSynthesized);
-  if (NS_SUCCEEDED(rv) && XRE_IsParentProcess()) {
-    MOZ_ASSERT(!mCurrentSourceNode);
-    mCurrentSourceNode = aSelection->GetFocusNode();
-    mCurrentDragSession = session;
+  if (!NS_SUCCEEDED(rv) && XRE_IsParentProcess()) {
+//    MOZ_ASSERT(mCurrentSourceNode == aDOMNode);
+    mCurrentSourceNode = nullptr;
+    mCurrentDragSession = nullptr;
+    mCurrentDataTransfer = nullptr;
   }
   return rv;
 }
@@ -605,7 +626,7 @@ nsBaseDragService::GetCurrentSession(mozIDOMWindowProxy* aWindowProxy,
 
   nsCOMPtr<nsPIDOMWindowInner> winInner;
   auto* window = nsPIDOMWindowOuter::From(aWindowProxy);
-  MOZ_ASSERT(window);
+  NS_ENSURE_TRUE(window, NS_ERROR_FAILURE);
   winInner = window->GetCurrentInnerWindow();
   NS_ENSURE_TRUE(winInner, NS_ERROR_FAILURE);
   nsGlobalWindowInner* globalWinInner = nsGlobalWindowInner::Cast(winInner);
@@ -640,10 +661,20 @@ nsIDragSession* nsBaseDragService::StartDragSession(nsIWidget* aWidget) {
   if (XRE_IsParentProcess() && !session) {
     session = CreateDragSession();
   }
-//  if (mCurrentSourceNode) {
-//    MOZ_ASSERT(XRE_IsParentProcess());
-//    static_cast<nsBaseDragSession*>(session.get())->SetSourceNode(mCurrentSourceNode);
-//  }
+
+/*
+  if (mCurrentSourceNode) {
+    MOZ_ASSERT(XRE_IsParentProcess());
+    static_cast<nsBaseDragSession*>(session.get())->SetSourceNode(mCurrentSourceNode);
+  }
+*/
+/*
+  if (mCurrentDataTransfer) {
+    MOZ_ASSERT(XRE_IsParentProcess());
+    static_cast<nsBaseDragSession*>(session.get())->SetDataTransfer(mCurrentDataTransfer);
+  }
+*/
+
   aWidget->SetDragSession(session);
   return session;
 }
@@ -1365,4 +1396,5 @@ void nsBaseDragSession::SetSourceNode(nsINode* aSourceNode) {
 void nsBaseDragService::ClearCurrentSourceNode() {
   mCurrentSourceNode = nullptr;
   mCurrentDragSession = nullptr;
+  mCurrentDataTransfer = nullptr;
 }

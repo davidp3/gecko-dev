@@ -342,6 +342,7 @@ class nsBaseDragService : public nsIDragService {
   // understood or handled that way, so we do this.
   nsCOMPtr<nsINode> mCurrentSourceNode;
   RefPtr<nsIDragSession> mCurrentDragSession;
+  RefPtr<mozilla::dom::DataTransfer> mCurrentDataTransfer;
 
   RefPtr<mozilla::test::MockDragServiceController> mMockController;
 
