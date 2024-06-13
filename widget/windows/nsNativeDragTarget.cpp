@@ -377,6 +377,18 @@ nsNativeDragTarget::DragLeave() {
 
 void nsNativeDragTarget::DragCancel() {
   // Cancel the drag session if we did DragEnter.
+
+#if 0
+  // DLP: new experiment block:
+  nsCOMPtr<nsIDragSession> session = mWidget->GetDragSession();
+  printf_stderr("[%p] nsNativeDragTarget::DragCancel | widget %p | session %p\n", this, mWidget, (void*)session.get());
+  if (session) {
+    ModifierKeyState modifierKeyState;
+    RefPtr<nsIWidget> widget = mWidget;
+    session->EndDragSession(widget, false, modifierKeyState.GetModifiers());
+  }
+#endif
+
   if (mTookOwnRef) {
     if (GetDropTargetHelper()) {
       GetDropTargetHelper()->DragLeave();

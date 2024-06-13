@@ -2511,13 +2511,19 @@ nsIDragSession* nsIWidget::GetDragSession() {
   if (mDragSuppressLevel == 0) {
     return mDragSession;
   }
+  printf_stderr("[%p] nsIWidget::GetDragSession | suppress level was %d\n",
+    this, (int)mDragSuppressLevel);
   return nullptr;
 }
 
 void nsIWidget::SetDragSession(nsIDragSession* aSession) {
   MOZ_ASSERT(!mDragSession || !aSession);
+  printf_stderr("[%p] nsIWidget::SetDragSession | was %p | is %p\n",
+    this, (void*)mDragSession.get(), (void*)aSession);
   mDragSession = aSession;
   if (mDragSession && !mBrowsers.IsEmpty()) {
+    printf_stderr("[%p] nsIWidget::SetDragSession | transferring child processes to session\n",
+      this);
     auto* bds = static_cast<nsBaseDragSession*>(mDragSession.get());
     bds->TakeDragSessionBrowsers(std::move(mBrowsers));
   }
@@ -2525,7 +2531,11 @@ void nsIWidget::SetDragSession(nsIDragSession* aSession) {
 
 void nsIWidget::SuppressDragging() {
   RefPtr<nsIDragSession> session = GetDragSession();
+  printf_stderr("[%p] nsIWidget::SuppressDragging | suppress level was %d | will be %d\n",
+    this, (int)mDragSuppressLevel, (int)(mDragSuppressLevel + 1));
   if (session) {
+    printf_stderr("[%p] nsIWidget::SuppressDragging | ending drag session %p prematurely\n",
+      this, mDragSession.get());
     session->EndDragSession(this, false, 0);
   }
   ++mDragSuppressLevel;
@@ -2533,6 +2543,8 @@ void nsIWidget::SuppressDragging() {
 
 void nsIWidget::UnsuppressDragging() {
   MOZ_ASSERT(mDragSuppressLevel > 0);
+  printf_stderr("[%p] nsIWidget::UnsuppressDragging | suppress level was %d | will be %d\n",
+    this, (int)mDragSuppressLevel, (int)(mDragSuppressLevel - 1));
   --mDragSuppressLevel;
 }
 

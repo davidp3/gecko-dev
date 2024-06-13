@@ -179,6 +179,21 @@ SubDialog.prototype = {
     }
     this._addDialogEventListeners();
 
+    /*
+    // Ensure we end any pending drag sessions:
+    try {
+      // The drag service getService call fails in puppeteer tests on Linux,
+      // so this is in a try...catch as it shouldn't stop us from opening the
+      // dialog. Bug 1806870 tracks fixing this.
+      let session = lazy.dragService.getCurrentSession(this._window);
+      if (session) {
+        session.endDragSession(this._window, true);
+      }
+    } catch (ex) {
+      console.error(ex);
+    }
+    */
+
     // If the parent is chrome we also need open the dialog as chrome, otherwise
     // the openDialog call will fail.
     let dialogFeatures = `resizable,dialog=no,centerscreen,chrome=${
